@@ -8,7 +8,7 @@
     "build": "vite build",
     "deploy": "tsc -b && bun run build && wrangler deploy",
     "check": "tsc -b && tsc -p tsconfig.worker.json && bun test",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "vite build"
   },
   "dependencies": {
     "@solidjs/router": "^0.16.1",

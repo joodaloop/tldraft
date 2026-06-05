@@ -37,11 +37,22 @@ export default function Sidebar(props: { activeId?: string }) {
       </header>
 
       <Show when={!loading()} fallback={<p class="sidebar-status">Loading…</p>}>
+        {/* Local drafts live on this device regardless of auth, so show them
+            even when signed out — alongside the sign-in prompt below. */}
+        <Show when={unsaved().length}>
+          <div class="grid gap-1 min-w-0">
+            <p class="opacity-50 px-3">Unsaved drafts</p>
+            <ul class="min-w-0">
+              <For each={unsaved()}>{Item}</For>
+            </ul>
+          </div>
+        </Show>
+
         <Show
           when={!signedOut()}
           fallback={
             <div class="px-3 grid gap-2 text-center mt-4">
-              <p class="opacity-50">Sign in to see your drafts.</p>
+              <p class="opacity-50">Sign in to see your saved drafts.</p>
               <form method="post" action="/api/login" class="auth-form">
                 <button class="w-full bg-white py-1.5 rounded-sm text-sm" type="submit">
                   Continue with Google
@@ -50,15 +61,10 @@ export default function Sidebar(props: { activeId?: string }) {
             </div>
           }
         >
-          <Show when={saved().length || unsaved().length} fallback={<p class="sidebar-status">No drafts yet.</p>}>
-            <Show when={unsaved().length}>
-              <div class="grid gap-1 min-w-0">
-                <p class="opacity-50 px-3">Unsaved drafts</p>
-                <ul class="min-w-0">
-                  <For each={unsaved()}>{Item}</For>
-                </ul>
-              </div>
-            </Show>
+          <Show
+            when={saved().length || unsaved().length}
+            fallback={<p class="sidebar-status">No drafts yet.</p>}
+          >
             <Show when={saved().length}>
               <Show when={unsaved().length}>
                 <p class="opacity-50 px-3">Saved</p>

@@ -181,8 +181,13 @@ export function PagesProvider(props: ParentProps) {
     cached === null &&
     (server.state === "pending" || server.state === "unresolved") &&
     local().length === 0;
+  // Signed out reflects the auth state of the /api/pages fetch (a 401), not
+  // whether we happen to have drafts cached/scanned locally. fetchPages throws
+  // Error("unauthorized") specifically on a 401 so we can tell auth failures
+  // apart from transient network/server errors.
   const signedOut = () =>
-    server.state === "errored" && saved().length === 0 && unsaved().length === 0;
+    server.state === "errored" &&
+    (server.error as Error | undefined)?.message === "unauthorized";
 
   return (
     <PagesContext.Provider
