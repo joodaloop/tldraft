@@ -3,10 +3,16 @@ import { applyCommitJSON } from "@stepwisehq/prosemirror-collab-commit/apply-com
 import type { CommitJSON, NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
 import { schema, emptyDocJSON, SCHEMA_VERSION } from "../shared/schema";
+import { routeApiRequest } from "./api";
 import type { ClientMessage, ServerMessage } from "./protocol";
 
 export interface Env {
   DocumentServer: DurableObjectNamespace<DocumentServer>;
+  /** D1 database for account metadata and saved page mappings. */
+  DB: D1Database;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  JWT_SECRET: string;
   /** Static SPA assets, served for any request the worker doesn't handle. */
   ASSETS: Fetcher;
 }
@@ -32,6 +38,7 @@ const commitKey = (version: number) => COMMIT_PREFIX + String(version).padStart(
 export class DocumentServer extends Server<Env> {
   // Hibernate when idle; `onStart` reloads state from storage on wake.
   static options = { hibernate: true };
+  static readonly IDLE_UPDATE_DELAY_MS = 30_000;
 
   #version = 0;
   #doc: NodeJSON = emptyDocJSON();
@@ -44,6 +51,10 @@ export class DocumentServer extends Server<Env> {
    * its next expected version, so out-of-order delivery would desync clients.
    */
   #tail: Promise<unknown> = Promise.resolve();
+
+  async onAlarm() {
+    await this.#touchPage();
+  }
 
   async onStart() {
     const stored = await this.ctx.storage.get<unknown>([VERSION_KEY, DOC_KEY]);
@@ -59,9 +70,17 @@ export class DocumentServer extends Server<Env> {
         [DOC_KEY]: this.#doc,
         [SCHEMA_KEY]: SCHEMA_VERSION,
       });
+      await this.env.DB.prepare(
+        "INSERT OR IGNORE INTO pages (id, title, body, updated_at) VALUES (?1, ?2, ?3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+      )
+        .bind(this.name, ...this.#pageText())
+        .run();
     } else {
       this.#version = version;
       this.#doc = doc;
+      await this.env.DB.prepare("INSERT OR IGNORE INTO pages (id, title, body) VALUES (?1, ?2, ?3)")
+        .bind(this.name, ...this.#pageText())
+        .run();
     }
   }
 
@@ -152,6 +171,7 @@ export class DocumentServer extends Server<Env> {
       [DOC_KEY]: this.#doc,
       [commitKey(this.#version)]: applied,
     });
+    await this.ctx.storage.setAlarm(Date.now() + DocumentServer.IDLE_UPDATE_DELAY_MS);
 
     // Broadcast to *everyone*, including the submitter. The submitter matches
     // `applied.ref` to confirm its own pending steps; others apply it as a
@@ -205,13 +225,30 @@ export class DocumentServer extends Server<Env> {
   #broadcast(msg: ServerMessage) {
     this.broadcast(JSON.stringify(msg));
   }
+
+  async #touchPage() {
+    const [title, body] = this.#pageText();
+    await this.env.DB.prepare(
+      "UPDATE pages SET title = ?2, body = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?1",
+    )
+      .bind(this.name, title, body)
+      .run();
+  }
+
+  #pageText(): [title: string, body: string] {
+    const doc = schema.nodeFromJSON(this.#doc);
+    const body = doc.textContent;
+    const title = body.split(/\r?\n/, 1)[0]?.trim() || this.name;
+    return [title, body];
+  }
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     return (
+      routeApiRequest(request, env) ??
       (await routePartykitRequest(request, env)) ??
-      env.ASSETS.fetch(request)
+      new Response("Not found", { status: 404 })
     );
   },
 } satisfies ExportedHandler<Env>;

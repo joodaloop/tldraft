@@ -7,7 +7,7 @@
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": true,
+    "run_worker_first": ["/api/*", "/parties/*"],
   },
   "durable_objects": {
     "bindings": [
@@ -17,6 +17,13 @@
       },
     ],
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "drafts",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+    },
+  ],
   "migrations": [
     {
       "tag": "v1", // one Durable Object class, SQLite-backed storage

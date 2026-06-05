@@ -21,7 +21,7 @@ import type {
   NodeJSON,
 } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
-import { schema, SCHEMA_VERSION } from "../../shared/schema";
+import { schema, emptyDocJSON, SCHEMA_VERSION } from "../../shared/schema";
 import type { ClientMessage, ServerMessage } from "../../worker/protocol";
 
 import "prosemirror-view/style/prosemirror.css";
@@ -83,6 +83,20 @@ async function saveCachedDoc(room: string, value: CachedDoc): Promise<void> {
   }
 }
 
+async function deleteCachedDoc(room: string): Promise<void> {
+  try {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(room);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    // best-effort
+  }
+}
+
 /** Connection lifecycle, surfaced for an optional status indicator. */
 export type DocStatus =
   | "connecting"
@@ -104,8 +118,9 @@ export interface DocProps {
   onStatus?: (status: DocStatus) => void;
 }
 
-const defaultHost = () =>
-  import.meta.env.DEV ? "localhost:8787" : window.location.host;
+// The @cloudflare/vite-plugin runs the Worker + Durable Object inside the Vite
+// dev server, so in dev the worker lives on the Vite origin too — same as prod.
+const defaultHost = () => window.location.host;
 
 /** The plugins every editor in the room shares, in order. */
 const editorPlugins = () => [
@@ -172,7 +187,9 @@ export default function Doc(props: DocProps): JSX.Element {
 
     /** Write the current doc + version + unconfirmed steps to the cache now. */
     const persist = () => {
-      if (!initialized) return; // nothing meaningful to cache yet
+      // Nothing meaningful to cache before seeding; and once halted we've
+      // dropped the cache on purpose — don't let a debounced write resurrect it.
+      if (!initialized || halted) return;
       const snap = snapshot();
       // Fire-and-forget: the write is async and must not block the main thread.
       if (snap) void saveCachedDoc(props.room, snap);
@@ -198,6 +215,12 @@ export default function Doc(props: DocProps): JSX.Element {
 
     const halt = (reason: string) => {
       halted = true;
+      // Drop the local cache: whatever we have is what got us halted (a stale
+      // schema, or edits the server rejected). Keeping it would re-seed the
+      // same broken state on reload and halt again — clearing it lets a reload
+      // re-seed cleanly from the server authority.
+      if (saveTimer) clearTimeout(saveTimer);
+      void deleteCachedDoc(props.room);
       view.setProps({ editable: () => false });
       setDocStatus("halted");
       console.error(`[Doc:${props.room}] halted — ${reason}`);
@@ -213,10 +236,11 @@ export default function Doc(props: DocProps): JSX.Element {
 
       if (!initialized) {
         // First snapshot: seed the collab plugin with the server's doc+version.
+        // Set `initialized` before updateState so `editable` is re-read as true.
+        initialized = true;
         view.updateState(
           view.state.apply(initCollabState(view.state, msg.version, msg.doc)),
         );
-        initialized = true;
         setDocStatus("connected");
         schedulePersist();
         trySend();
@@ -233,6 +257,24 @@ export default function Doc(props: DocProps): JSX.Element {
         resyncTarget = msg.version;
         setDocStatus("syncing");
         send({ type: "sync", version: current });
+      } else if (msg.version < current) {
+        // We're ahead of the authority. The only way this happens is the server
+        // lost history (reset/rollback) — our cached version and pending edits
+        // are built on commits it no longer has, so they can't be replayed and
+        // resubmitting them would just get rejected (and, with the cache, that
+        // rejection would survive reloads). Hard-reset to the server's snapshot
+        // and overwrite the stale cache. Unconfirmed edits past the server's
+        // version are unrecoverable and dropped.
+        console.warn(
+          `[Doc:${props.room}] local state (v${current}) is ahead of server (v${msg.version}); resetting to server snapshot`,
+        );
+        resyncTarget = null;
+        view.updateState(
+          view.state.apply(initCollabState(view.state, msg.version, msg.doc)),
+        );
+        setDocStatus("connected");
+        schedulePersist();
+        trySend();
       } else {
         setDocStatus("connected");
         trySend();
@@ -287,7 +329,10 @@ export default function Doc(props: DocProps): JSX.Element {
 
     // --- Editor view -------------------------------------------------------
     view = new EditorView(mount, {
-      // Start empty + read-only; `init` seeds the real doc and enables editing.
+      // Starts empty; we seed the collab state locally (from cache, else an
+      // empty doc) before connecting, so the editor is editable offline and at
+      // all times — `initialized` only gates the sub-frame before that seed,
+      // and `halted` is the one hard stop (schema mismatch).
       state: EditorState.create({ schema, plugins: editorPlugins() }),
       editable: () => initialized && !halted,
       dispatchTransaction(tr: Transaction) {
@@ -316,37 +361,52 @@ export default function Doc(props: DocProps): JSX.Element {
       });
     };
 
-    // --- Restore from cache, then connect ----------------------------------
-    // Seed the editor from the local cache before opening the socket, so the
-    // last-known doc is visible and editable offline. Marking ourselves
-    // `initialized` means the server's `init` takes handleInit's reconnect
-    // path, which catches us up from the cached version instead of resetting.
+    // --- Restore (local-first), then connect -------------------------------
+    // Seed the collab state locally before opening the socket so the editor is
+    // editable immediately, online or off. The server's version-0 base is an
+    // empty doc (see worker/index.ts), so seeding empty here is a consistent
+    // starting point: `init` then takes handleInit's reconnect path and
+    // replays the commits we're missing on top of it.
+    // Note: flip `initialized` before the seeding updateState — ProseMirror
+    // re-reads the `editable` prop during updateState, so it must already be
+    // true or the editor stays contenteditable=false until the next update.
+    const seedEmpty = () => {
+      initialized = true;
+      view.updateState(
+        view.state.apply(initCollabState(view.state, 0, emptyDocJSON())),
+      );
+    };
+
     void loadCachedDoc(props.room).then((cached) => {
       if (disposed) return;
-      if (cached && !initialized) {
+      if (!initialized) {
         try {
-          // Seed the confirmed authority state from the cached base...
-          view.updateState(
-            view.state.apply(
-              initCollabState(view.state, cached.version, cached.doc),
-            ),
-          );
-          // ...then replay the unconfirmed steps as local edits, so the collab
-          // plugin tracks them as pending and trySend() ships them once we're
-          // connected.
-          if (cached.unconfirmed.length) {
-            const tr = view.state.tr;
-            for (const stepJSON of cached.unconfirmed) {
-              tr.step(Step.fromJSON(view.state.schema, stepJSON));
+          if (cached) {
+            initialized = true;
+            // Seed the confirmed authority state from the cached base...
+            view.updateState(
+              view.state.apply(
+                initCollabState(view.state, cached.version, cached.doc),
+              ),
+            );
+            // ...then replay the unconfirmed steps as local edits, so the
+            // collab plugin tracks them as pending and trySend() ships them
+            // once we're connected.
+            if (cached.unconfirmed.length) {
+              const tr = view.state.tr;
+              for (const stepJSON of cached.unconfirmed) {
+                tr.step(Step.fromJSON(view.state.schema, stepJSON));
+              }
+              if (tr.docChanged) view.updateState(view.state.apply(tr));
             }
-            if (tr.docChanged) view.updateState(view.state.apply(tr));
+          } else {
+            seedEmpty();
           }
-          initialized = true;
         } catch (err) {
-          // A malformed cache entry shouldn't block startup — fall back to the
-          // server's snapshot via handleInit's first-seed path.
+          // A malformed cache entry shouldn't block editing — seed empty and
+          // let the reconnect sync bring us up to the server's state.
           console.warn(`[Doc:${props.room}] ignoring bad cache entry`, err);
-          initialized = false;
+          seedEmpty();
         }
       }
       connect();

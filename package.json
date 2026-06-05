@@ -13,6 +13,7 @@
     "@solidjs/router": "^0.16.1",
     "@stepwisehq/prosemirror-collab-commit": "^1.0.5",
     "@tailwindcss/vite": "^4.3.0",
+    "@tsndr/cloudflare-worker-jwt": "^3.2.1",
     "partyserver": "^0.5.6",
     "partysocket": "^1.1.19",
     "prosemirror-commands": "^1.7.1",
