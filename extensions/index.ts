@@ -17,7 +17,6 @@ import { Gapcursor } from "./basic/Gapcursor";
 import { Heading } from "./blocks/Heading";
 import { Italic } from "./marks/Italic";
 import { Placeholder } from "./basic/Placeholder";
-import Selection from "./basic/Selection";
 import { Strike } from "./marks/Strike";
 import { Text } from "./basic/Text";
 import { UndoRedo } from "./basic/UndoRedo";
@@ -65,7 +64,12 @@ export const allExtensions = [
     types: ["paragraph", "heading", "horizontalRule"],
   }),
   Paragraph,
-  Placeholder,
+  Placeholder.configure({
+    // Show the hint on every empty block, not just the focused one, so a blank
+    // draft surfaces both the title and the body placeholder at once.
+    showOnlyCurrent: false,
+    placeholder: ({ node }) => (node.type.name === "heading" ? "Untitled" : ""),
+  }),
   Rubricate,
   Section,
   // Selection,

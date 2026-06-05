@@ -1,5 +1,6 @@
-import { schema as basicSchema } from "prosemirror-schema-basic";
+import { getSchema } from "@tiptap/core";
 import type { NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
+import { allExtensions } from "../extensions";
 
 /**
  * The single source of truth for the document schema, shared by the authority
@@ -13,11 +14,24 @@ import type { NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-comm
  * against the value in the `init` message and should refuse to edit on a
  * mismatch rather than silently corrupting the document during an upgrade.
  */
-export const schema = basicSchema;
+// Derived from the Tiptap extension kit via `getSchema`, so the authority (the
+// Durable Object) and every client validate against the exact same ProseMirror
+// schema. `getSchema` reads only the schema parts of each extension and never
+// touches the DOM, so this is safe to evaluate in the Worker too.
+export const schema = getSchema(allExtensions);
 
-export const SCHEMA_VERSION = 1;
+// Bumped from 1: the schema shape changed wholesale (basicSchema -> Tiptap kit;
+// node/mark names differ), so v1 documents are intentionally incompatible.
+export const SCHEMA_VERSION = 2;
 
-/** An empty document for this schema (a doc containing one empty paragraph). */
+/**
+ * An empty document for this schema: an empty level-1 heading followed by an
+ * empty paragraph. The two empty textblocks give the Placeholder extension
+ * something to hang the title and body hints on, so a blank draft reads as a
+ * titled page rather than a single stray line.
+ */
 export function emptyDocJSON(): NodeJSON {
-  return schema.topNodeType.createAndFill()!.toJSON() as NodeJSON;
+  const heading = schema.nodes.heading.createAndFill({ level: 1 })!;
+  const paragraph = schema.nodes.paragraph.createAndFill()!;
+  return schema.topNodeType.create(null, [heading, paragraph]).toJSON() as NodeJSON;
 }

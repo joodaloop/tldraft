@@ -152,6 +152,32 @@ async function addPage(request: Request, env: Env, pageId: string): Promise<Resp
   return json({ ok: true, pageId });
 }
 
+/**
+ * Pin (POST) or unpin (DELETE) one of the caller's saved drafts. Only touches a
+ * page the user has saved; an unknown/unsaved page id 404s so the client can
+ * tell "not yours" apart from a successful toggle.
+ */
+async function setPinned(
+  request: Request,
+  env: Env,
+  pageId: string,
+  pinned: boolean,
+): Promise<Response> {
+  const userId = await currentUserId(request, env);
+  if (!userId) return json({ error: "unauthorized" }, { status: 401 });
+
+  const { meta } = await env.DB.prepare(
+    `UPDATE user_pages
+     SET pinned_at = ${pinned ? "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')" : "NULL"}
+     WHERE user_id = ?1 AND page_id = ?2`,
+  )
+    .bind(userId, pageId)
+    .run();
+
+  if (!meta.changes) return json({ error: "not found" }, { status: 404 });
+  return json({ ok: true, pageId, pinned });
+}
+
 export function routeApiRequest(request: Request, env: Env): Response | Promise<Response> | null {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
@@ -178,6 +204,11 @@ export function routeApiRequest(request: Request, env: Env): Response | Promise<
   const addMatch = url.pathname.match(/^\/api\/add\/([^/]+)\/?$/);
   if (addMatch && (request.method === "GET" || request.method === "POST")) {
     return addPage(request, env, decodeURIComponent(addMatch[1]));
+  }
+
+  const pinMatch = url.pathname.match(/^\/api\/pin\/([^/]+)\/?$/);
+  if (pinMatch && (request.method === "POST" || request.method === "DELETE")) {
+    return setPinned(request, env, decodeURIComponent(pinMatch[1]), request.method === "POST");
   }
 
   return json({ error: "not found" }, { status: 404 });

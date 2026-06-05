@@ -4,6 +4,25 @@ import solid from "vite-plugin-solid";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
+  // The collab plugin imports the bare `prosemirror-*` packages while Tiptap
+  // imports them via `@tiptap/pm/*`. Both must resolve to a single copy of each
+  // or `Step`/`Schema`/`instanceof` checks straddle two module instances and
+  // silently break collab. Dedupe forces one copy (client and Worker bundles).
+  resolve: {
+    dedupe: [
+      "prosemirror-state",
+      "prosemirror-model",
+      "prosemirror-view",
+      "prosemirror-transform",
+      "prosemirror-keymap",
+      "prosemirror-commands",
+      "prosemirror-history",
+      "prosemirror-inputrules",
+      "prosemirror-gapcursor",
+      "prosemirror-dropcursor",
+      "prosemirror-schema-list",
+    ],
+  },
   plugins: [
     tailwindcss(),
     solid(),

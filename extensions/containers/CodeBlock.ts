@@ -119,7 +119,7 @@ export const CodeBlock = Node.create<CodeBlockOptions>({
     ];
   },
 
-  renderHTML({ node, HTMLAttributes }) {
+  renderHTML({ HTMLAttributes }) {
     return [
       "pre",
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes),

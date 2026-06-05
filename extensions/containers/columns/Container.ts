@@ -1,5 +1,13 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    flexContainer: {
+      setFlexContainer: () => ReturnType;
+    };
+  }
+}
+
 export const ColumnContainer = Node.create({
   name: "flexContainer",
   group: "root",

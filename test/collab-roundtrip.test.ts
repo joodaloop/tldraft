@@ -1,8 +1,9 @@
 /**
  * End-to-end smoke test for the authority. Drives the real client-side collab
  * plugin against a running `wrangler dev` (no DOM — ProseMirror state/transform
- * work headlessly). Run with: bun run dev:server (in one shell), then
- * `bun test/collab-roundtrip.test.ts`.
+ * work headlessly). Run with: bun run dev (in one shell), then
+ * `bun test/collab-roundtrip.test.ts`. Override the server location with
+ * COLLAB_TEST_URL / COLLAB_TEST_HOST / COLLAB_TEST_PORT (see below).
  */
 import { EditorState } from "prosemirror-state";
 import {
@@ -17,7 +18,22 @@ import {
 import { schema } from "../shared/schema";
 
 const ROOM = "smoke-" + Math.random().toString(36).slice(2, 8);
-const URL = `ws://127.0.0.1:8787/parties/document-server/${ROOM}`;
+
+// Where the dev server lives is environment-specific, so don't bake it in.
+// Point the test at any running server with COLLAB_TEST_URL (full ws[s]:// base,
+// with or without a trailing /parties/... path), or tweak host/port piecemeal
+// via COLLAB_TEST_HOST / COLLAB_TEST_PORT. Defaults match `bun run dev` (vite,
+// which run-worker-firsts /parties/* to the Worker); use port 8787 for a
+// standalone `wrangler dev`.
+function serverBase(): string {
+  const explicit = process.env.COLLAB_TEST_URL;
+  if (explicit) return explicit.replace(/\/+$/, "");
+  const host = process.env.COLLAB_TEST_HOST ?? "127.0.0.1";
+  const port = process.env.COLLAB_TEST_PORT ?? "5173";
+  return `ws://${host}:${port}`;
+}
+
+const URL = `${serverBase()}/parties/document-server/${ROOM}`;
 
 type ServerMessage =
   | { type: "init"; version: number; doc: any; schemaVersion: number }

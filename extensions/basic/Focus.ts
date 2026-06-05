@@ -43,7 +43,7 @@ export const Focus = Extension.create<FocusOptions>({
         key: new PluginKey("focus"),
         props: {
           decorations: ({ doc, selection }) => {
-            const { isEditable, isFocused } = this.editor;
+            const { isEditable } = this.editor;
             const { anchor } = selection;
             const decorations: Decoration[] = [];
 

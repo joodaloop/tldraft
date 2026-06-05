@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "types": ["./worker-configuration.d.ts"],
     "strict": true,
     "skipLibCheck": true,
@@ -13,5 +13,6 @@
     "esModuleInterop": true,
     "resolveJsonModule": true
   },
-  "include": ["worker/**/*.ts", "shared/**/*.ts", "worker-configuration.d.ts"]
+  "include": ["worker/**/*.ts", "shared/**/*.ts", "extensions/**/*.ts", "worker-configuration.d.ts"],
+  "exclude": ["node_modules", "extensions/**/unused-*.ts"]
 }

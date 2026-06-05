@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS user_pages (
   user_id TEXT NOT NULL,
   page_id TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- When the user pinned this draft, or NULL if unpinned. A timestamp (rather
+  -- than a flag) lets the sidebar order pinned drafts by most-recently-pinned.
+  pinned_at TEXT,
   PRIMARY KEY (user_id, page_id),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE

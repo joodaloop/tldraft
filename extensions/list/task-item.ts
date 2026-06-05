@@ -260,8 +260,12 @@ export const TaskItem = Node.create<TaskItemOptions>({
       listItem.dataset.checked = node.attrs.checked;
       checkbox.checked = node.attrs.checked;
 
-      checkboxWrapper.append(checkbox, checkboxStyler);
-      listItem.append(checkboxWrapper, content);
+      // The worker tsconfig pulls in both the DOM lib (for the kit's HTMLElement
+      // refs) and the Cloudflare Worker globals; that collision makes `.append`
+      // resolve to the wrong (Response-bodied) overload. This code only runs in
+      // the browser, so the cast sidesteps type-noise without changing behavior.
+      (checkboxWrapper as any).append(checkbox, checkboxStyler);
+      (listItem as any).append(checkboxWrapper, content);
 
       Object.entries(HTMLAttributes).forEach(([key, value]) => {
         listItem.setAttribute(key, value);

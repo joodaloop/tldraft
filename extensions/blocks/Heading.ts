@@ -6,7 +6,7 @@ export const Heading = h.extend({
       ...this.parent?.(),
       Backspace: ({ editor }) => {
         const { state } = editor;
-        const { $from, $to } = state.selection;
+        const { $from } = state.selection;
         if (
           state.selection.empty &&
           $from.parentOffset === 0 &&

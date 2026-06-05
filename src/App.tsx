@@ -1,29 +1,27 @@
-import { A, Route, Router } from "@solidjs/router";
+import { Route, Router, useParams } from "@solidjs/router";
 import Draft from "./pages/Draft";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
+import Sidebar from "./components/Sidebar";
 import { PagesProvider } from "./stores/pages";
+
+function AppLayout(props: { children?: import("solid-js").JSX.Element }) {
+  const params = useParams();
+
+  return (
+    <PagesProvider>
+      <div class="flex bg-background">
+        <Sidebar activeId={params.id} />
+        <div class="w-full h-dvh overflow-auto">{props.children}</div>
+      </div>
+    </PagesProvider>
+  );
+}
 
 function App() {
   return (
-    <Router
-      root={(props) => (
-        <PagesProvider>
-          <header class="site-header">
-            <A href="/" class="brand">
-              Drafts
-            </A>
-            <nav aria-label="Primary navigation">
-              <A href="/draft/welcome">Draft</A>
-              <A href="/login">Login</A>
-              <A href="/settings">Settings</A>
-            </nav>
-          </header>
-          {props.children}
-        </PagesProvider>
-      )}
-    >
+    <Router root={(props) => <AppLayout>{props.children}</AppLayout>}>
       <Route path="/" component={Home} />
       <Route path="/draft/:id" component={Draft} />
       <Route path="/login" component={Login} />

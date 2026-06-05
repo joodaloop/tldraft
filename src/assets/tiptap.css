@@ -1,0 +1,476 @@
+:root {
+  --v-space: 4;
+  --h-space: 1;
+  --font-size: 16px;
+
+  --color: #333;
+  --base-gap: calc(0.25em * var(--v-space));
+  --list-gap: calc(0.1em * var(--v-space));
+
+  --selection: #00000018;
+  --padding: 24px;
+}
+
+.tiptap {
+  font-size: var(--font-size);
+  color: var(--color);
+  line-height: 1.5em;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  font-family: Avenir Next;
+}
+
+.tiptap.ProseMirror {
+  outline: none;
+  width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  white-space: unset;
+  padding: 64px;
+  background-color: white;
+  min-height: 100dvh;
+  border-radius: 12px;
+  border: solid 0.5px #ddd;
+}
+
+.tiptap::selection {
+  /*background-color: #cfe1f9;*/
+  background-color: var(--selection);
+}
+
+.ProseMirror-selectednode {
+  /*background-color: #dff1f9;*/
+  background-color: var(--selection);
+}
+
+/* Only hint on the title (any empty heading) and the first body paragraph —
+   not on every empty paragraph deeper in the doc. */
+.tiptap > .is-empty:is(h1, h2, h3, h4, h5, h6):first-child::before {
+  color: #bbb;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/*.dropCursor {
+   height: 4px;
+  transition:
+   top 0.1s ease-out,
+    left 0.1s ease-out,
+    width 0.1s ease-out;
+}*/
+
+.tiptap.ProseMirror-focused:focus {
+  outline: none;
+}
+
+div[data-tippy-root] {
+  transition: transform 1000s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.tiptap *:last-child,
+.tiptap div > *:last-child {
+  margin-bottom: 0px !important;
+}
+
+.tiptap div > *:first-child {
+  margin-top: 0px;
+}
+
+.tiptap *:first-child {
+  margin-top: 0px;
+}
+
+.tiptap a {
+  text-decoration-line: underline;
+  text-underline-offset: 0.1em;
+  color: inherit;
+}
+
+/*
+.prosemirror-dropcursor-block {
+  padding: 1em;
+  background-color: lightblue;
+} */
+
+.tiptap p,
+.editable p {
+  margin-top: 0px;
+  margin-bottom: calc(var(--v-space) * 0.25 * var(--font-size));
+  position: relative;
+}
+
+/* .tiptap p::after {
+  position: absolute;
+  top: 0;
+  left: -3em;
+  content: "";
+  width: 4em;
+  height: 100%;
+  background: #00000011;
+  z-index: 2;
+} */
+
+/*.tiptap p:empty {
+  height: 1.2em;
+}*/
+
+.tiptap section {
+  padding: calc(0.6 * var(--base-gap)) calc(0.75 * var(--base-gap));
+  margin-bottom: var(--base-gap);
+  background-color: #00000015;
+  border-radius: calc(0.3 * var(--base-gap));
+}
+
+.tiptap h1 {
+  font-weight: 600;
+  column-span: all;
+  font-size: 2.5em;
+  line-height: 1em;
+  margin-top: calc(var(--v-space) * 0.25em);
+  margin-bottom: calc(var(--v-space) * 0.15em);
+  /* text-wrap: balance; */
+}
+
+.tiptap h2 {
+  font-weight: 600;
+  font-size: 2em;
+  line-height: 1.1em;
+  margin-top: calc(var(--v-space) * 0.25em);
+  margin-bottom: calc(var(--v-space) * 0.15em);
+}
+
+.tiptap h3 {
+  font-weight: 600;
+  font-size: 1.5em;
+  line-height: 1.3em;
+  margin-top: calc(var(--v-space) * 0.25em);
+  margin-bottom: calc(var(--v-space) * 0.14em);
+}
+
+.tiptap h4 {
+  font-weight: 600;
+  font-size: 1.2em;
+  line-height: 1.2em;
+  margin-top: calc(var(--v-space) * 0.3em);
+  margin-bottom: calc(var(--v-space) * 0.1em);
+}
+
+.tiptap blockquote {
+  border-left: solid 4px var(--color);
+  margin-bottom: var(--base-gap);
+  padding-left: 0.75em;
+  margin-top: 0.4em;
+}
+
+.tiptap code {
+  background: #00000015;
+  padding: 0.1em 0.3em;
+  font-size: 0.85em;
+  border-radius: calc(0.25 * var(--base-gap));
+  font-family: Comic Mono;
+}
+
+.tiptap.ProseMirror pre {
+  background: #00000015;
+  padding: 0.75em 0.85em;
+  margin-bottom: var(--base-gap);
+  border-radius: 0.3em;
+  line-height: 1.4em;
+  white-space: pre;
+  width: 100%;
+  overflow-x: scroll;
+  font-family: Comic Mono;
+}
+
+.tiptap pre code {
+  background: transparent;
+  padding: 0px;
+  width: 300px;
+  max-width: 100%;
+  overflow-x: scroll;
+  font-size: 1em;
+}
+
+.tiptap hr {
+  height: 0.1em;
+  margin-bottom: calc(1.2 * var(--base-gap));
+  margin-top: calc(0.2 * var(--base-gap));
+  /* margin-top: calc(var(--v-space) * 0.4em);
+  margin-bottom: calc(var(--v-space) * 0.4em); */
+}
+
+.tiptap hr.ProseMirror-selectednode {
+  /*outline: solid 6px #dff1f9;*/
+  outline: solid 6px var(--selection);
+}
+
+.tiptap ul {
+  list-style-type: disc;
+  margin-bottom: var(--base-gap);
+  margin-left: calc(var(--v-space) * 0.45em);
+}
+
+.tiptap ol {
+  counter-reset: editor-ol 0;
+  list-style-type: ordinal;
+  margin-bottom: var(--base-gap);
+  margin-left: calc(var(--v-space) * 0.45em);
+  font-variant-numeric: tabular-nums;
+}
+
+.tiptap li ul,
+.tiptap li ol {
+  margin-top: var(--list-gap);
+  margin-bottom: var(--list-gap);
+}
+
+.tiptap li {
+  margin: 0px;
+  position: relative;
+  margin-bottom: var(--list-gap);
+  counter-increment: editor-ol 1;
+}
+
+.tiptap li:last-child {
+  margin-bottom: 0px;
+}
+
+.tiptap li p {
+  position: relative;
+  margin-bottom: var(--list-gap);
+  counter-increment: editor-ol 1;
+}
+
+.tiptap li:has(p:last-child:not(:first-child)) {
+  margin-bottom: calc(1.5 * var(--list-gap));
+}
+
+.tiptap img {
+  width: 100%;
+  height: auto;
+  max-height: 24em;
+  max-width: max-content;
+  margin: auto;
+  border-radius: 4px;
+  margin-bottom: var(--base-gap);
+  border: solid 0.5px var(--color-overlay);
+}
+
+img.selected {
+  position: relative;
+  filter: brightness(80%);
+}
+
+/* Checkboxes */
+
+.tiptap [data-type="taskList"] {
+  list-style-type: none;
+  margin-left: 0em;
+}
+
+.tiptap ul[data-type="taskList"] > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8em;
+}
+
+.tiptap ul[data-type="taskList"] li > label {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+  align-self: flex-start;
+  margin-top: 0.3em;
+  cursor: pointer;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 1em;
+  height: 1em;
+  position: relative;
+  border: 0.1em solid var(--color);
+  border-radius: 0.2em;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+}
+
+ul[data-type="taskList"] li > label input[type="checkbox"]:before {
+  content: "";
+  width: 0.6em;
+  height: 0.6em;
+  transform: scale(0);
+  box-shadow: inset 1em 1em;
+  transform-origin: center;
+  -webkit-clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%);
+}
+
+ul[data-type="taskList"] li > label input[type="checkbox"]:checked:before {
+  transform: scale(1);
+  color: #ddd;
+}
+
+.tiptap ul[data-type="taskList"] li > div {
+  margin-top: 0px;
+}
+
+li[data-checked="true"] {
+  text-decoration: line-through;
+}
+
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > label input[type="checkbox"] {
+  background: #333;
+}
+
+mark {
+  padding: 0.02em 0em;
+  margin: 0px 0em;
+  border-radius: 0.1em;
+  background-color: #fffabb;
+  /* #f8fa36aa; */
+  z-index: 2;
+}
+
+.tiptap b {
+  color: #9f2219;
+  font-weight: inherit;
+}
+
+.tiptap i {
+  font-style: inherit;
+  opacity: 0.45;
+}
+
+.tiptap strong {
+  font-weight: 850;
+}
+
+.tiptap p strong {
+  font-weight: 650;
+}
+
+.tiptap .small {
+  font-size: 0.82em;
+  line-height: 1.5em;
+}
+
+.tiptap .above {
+  margin-bottom: calc(var(--v-space) * 1.5px) !important;
+}
+
+.tiptap hr.above {
+  margin-bottom: calc(var(--v-space) * 1.2px) !important;
+}
+
+.tiptap .above + * {
+  margin-top: 0px;
+}
+
+.tiptap .align-left {
+  text-align: left;
+}
+
+.tiptap .align-center {
+  text-align: center;
+}
+
+.tiptap .align-right {
+  text-align: right;
+}
+
+.tiptap .align-justify {
+  text-align: justify;
+}
+
+.tiptap .split {
+  display: flex;
+  flex-direction: column;
+  gap: calc(1 * var(--base-gap));
+  position: relative;
+  margin-bottom: calc(var(--base-gap));
+  justify-content: space-between;
+  border-radius: calc(0.35 * var(--base-gap));
+  align-items: start;
+}
+
+/* .split.ProseMirror-selectednode {
+  background-color: transparent;
+} */
+
+.split.ProseMirror-selectednode::before {
+  background-color: transparent;
+  content: "";
+  position: absolute;
+  background: #dff1f9;
+  left: calc(-0.5 * var(--base-gap));
+  top: calc(-0.5 * var(--base-gap));
+  border-radius: calc(0.25 * var(--base-gap));
+  height: calc(100% + var(--base-gap));
+  width: calc(100% + var(--base-gap));
+  pointer-events: none;
+}
+
+.split div {
+  width: 100%;
+  position: relative;
+}
+
+.split div::after {
+  content: "";
+  position: absolute;
+  left: calc(-0.5 * var(--base-gap));
+  top: calc(-0.5 * var(--base-gap));
+  border-radius: calc(0.25 * var(--base-gap));
+  height: calc(100% + var(--base-gap));
+  width: calc(100% + var(--base-gap));
+  background: transparent;
+  pointer-events: none;
+  /* transition: background 0.2s ease; */
+  z-index: 2;
+}
+
+/* .split div:hover::after {
+  background: #0000000b;
+  transition: background 0s ease;
+} */
+
+.ProseMirror-focused .split div.has-focus::after {
+  background: #0000000b;
+  transition: background 0s ease;
+}
+
+.text {
+  container-type: inline-size;
+  container-name: text;
+}
+
+@container text (width > 350px) {
+  .tiptap .split {
+    flex-direction: row;
+    gap: clamp(8px, calc(var(--font-size) * calc(0.5 + var(--h-space))), 64px);
+  }
+
+  .split div:first-child {
+    width: 50%;
+    position: relative;
+  }
+
+  .split div:last-child {
+    width: 50%;
+    position: relative;
+  }
+
+  /* .tiptap .split:has(div:last-child p.above:last-child) {
+    margin-bottom: calc(-0.6 * var(--base-gap));
+  }
+
+  .tiptap .split:has(div:last-child p.above:last-child) + * {
+    margin-top: 0px;
+  } */
+}

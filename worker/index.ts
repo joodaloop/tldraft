@@ -23,6 +23,12 @@ export interface Env {
 // keyed by the version each commit produced. Versions are zero-padded so the
 // keys sort lexicographically in version order, which lets `storage.list`
 // return a contiguous, ordered slice of the log.
+//
+// The durable log is never trimmed — it's the complete history. On top of it we
+// keep a bounded in-memory window of the most recent commits (`#log`) so the
+// common catch-up (a client that blinked offline for a moment) is served
+// straight from RAM. Only that window is trimmed; clients further behind than
+// the window fall back to reading the full range from durable storage.
 const VERSION_KEY = "version";
 const DOC_KEY = "doc";
 const SCHEMA_KEY = "schemaVersion";
@@ -39,9 +45,20 @@ export class DocumentServer extends Server<Env> {
   // Hibernate when idle; `onStart` reloads state from storage on wake.
   static options = { hibernate: true };
   static readonly IDLE_UPDATE_DELAY_MS = 30_000;
+  /** How many recent commits to keep in memory for fast catch-up. */
+  static readonly MAX_INMEMORY_COMMITS = 512;
 
   #version = 0;
   #doc: NodeJSON = emptyDocJSON();
+
+  /**
+   * The most recent commits, in ascending version order, capped at
+   * `MAX_INMEMORY_COMMITS`. A cache over the durable log: it covers versions
+   * `(#version - #log.length, #version]`. Empty after a hibernation wake and
+   * refills as new commits arrive — anything it doesn't cover is read back from
+   * durable storage on demand.
+   */
+  #log: CommitJSON[] = [];
 
   /**
    * Serializes commit processing. Every incoming commit is rebased and applied
@@ -166,6 +183,13 @@ export class DocumentServer extends Server<Env> {
     this.#doc = result.docJSON;
     this.#version = applied.version;
 
+    // Append to the in-memory window and drop the oldest if it overflows. The
+    // durable write below keeps the full history regardless.
+    this.#log.push(applied);
+    if (this.#log.length > DocumentServer.MAX_INMEMORY_COMMITS) {
+      this.#log.splice(0, this.#log.length - DocumentServer.MAX_INMEMORY_COMMITS);
+    }
+
     await this.ctx.storage.put({
       [VERSION_KEY]: this.#version,
       [DOC_KEY]: this.#doc,
@@ -208,9 +232,23 @@ export class DocumentServer extends Server<Env> {
     }
   }
 
-  /** All commits with version in (base, head], in ascending version order. */
+  /**
+   * All commits with version in (base, head], in ascending version order.
+   * Served from the in-memory window when it reaches back far enough; otherwise
+   * read in full from the durable log.
+   */
   async #commitsSince(base: number): Promise<CommitJSON[]> {
     if (base >= this.#version) return [];
+
+    // Lowest version currently held in memory (or head+1 when empty).
+    const memLow = this.#log.length > 0 ? this.#log[0].version : this.#version + 1;
+    if (base + 1 >= memLow) {
+      // The whole range is in the window — slice it, no storage read.
+      return this.#log.slice(base + 1 - memLow);
+    }
+
+    // Client is further behind than the window reaches; pull the full range
+    // from durable storage.
     const map = await this.ctx.storage.list<CommitJSON>({
       prefix: COMMIT_PREFIX,
       start: commitKey(base + 1),

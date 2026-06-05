@@ -78,7 +78,7 @@ export function handleBackspace(editor: Editor) {
       firstCol.childCount === 1 &&
       secondCol &&
       secondCol.childCount === 1 &&
-      secondCol.firstChild.content.size === 0
+      secondCol.firstChild?.content.size === 0
     ) {
       // Both are empty, so delete the entire flexContainer
       const posBeforeContainer = $from.before(-2);
@@ -142,6 +142,7 @@ export function handleBackspace(editor: Editor) {
     $from.parentOffset === 0
   ) {
     const firstCol = container.firstChild;
+    if (!firstCol) return false;
     const lastNodeInFirstCol = firstCol.lastChild;
     let merge = false;
 

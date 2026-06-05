@@ -1,11 +1,6 @@
 import { createSignal, onCleanup, onMount, type JSX } from "solid-js";
-import { EditorState, type Transaction } from "prosemirror-state";
-import { EditorView } from "prosemirror-view";
-import { keymap } from "prosemirror-keymap";
-import { baseKeymap } from "prosemirror-commands";
-import { history, undo, redo } from "prosemirror-history";
+import { Editor } from "@tiptap/core";
 import {
-  collab,
   collabKey,
   initCollabState,
   sendableCommit,
@@ -21,7 +16,9 @@ import type {
   NodeJSON,
 } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
-import { schema, emptyDocJSON, SCHEMA_VERSION } from "../../shared/schema";
+import { allExtensions } from "../../extensions";
+import { Collab } from "./collabExtension";
+import { emptyDocJSON, SCHEMA_VERSION } from "../../shared/schema";
 import type { ClientMessage, ServerMessage } from "../../worker/protocol";
 
 import "prosemirror-view/style/prosemirror.css";
@@ -116,28 +113,25 @@ export interface DocProps {
   class?: string;
   /** Notified whenever the connection status changes. */
   onStatus?: (status: DocStatus) => void;
+  /**
+   * Notified with the doc's display title (its first non-empty line, or
+   * "Untitled") on seed and whenever it changes — lets the sidebar list this
+   * draft live, before it's ever saved.
+   */
+  onTitle?: (title: string) => void;
 }
 
 // The @cloudflare/vite-plugin runs the Worker + Durable Object inside the Vite
 // dev server, so in dev the worker lives on the Vite origin too — same as prod.
 const defaultHost = () => window.location.host;
 
-/** The plugins every editor in the room shares, in order. */
-const editorPlugins = () => [
-  history(),
-  keymap({ "Mod-z": undo, "Mod-y": redo, "Shift-Mod-z": redo }),
-  keymap(baseKeymap),
-  // Tracks the synced version + unconfirmed local steps. Seeded by
-  // `initCollabState` once the server sends its snapshot.
-  collab(),
-];
 
 export default function Doc(props: DocProps): JSX.Element {
   const [status, setStatus] = createSignal<DocStatus>("connecting");
   let mount!: HTMLDivElement;
 
   onMount(() => {
-    let view: EditorView;
+    let editor: Editor;
     let socket: PartySocket | undefined;
 
     // --- Collab controller state -------------------------------------------
@@ -171,8 +165,8 @@ export default function Doc(props: DocProps): JSX.Element {
      * a doc that diverges from the version it claims to be at.
      */
     const snapshot = (): CachedDoc | null => {
-      const unconfirmed = collabKey.getState(view.state)?.unconfirmed ?? [];
-      let doc = view.state.doc;
+      const unconfirmed = collabKey.getState(editor.state)?.unconfirmed ?? [];
+      let doc = editor.state.doc;
       for (let i = unconfirmed.length - 1; i >= 0; i--) {
         const result = unconfirmed[i].inverted.apply(doc);
         if (!result.doc) return null;
@@ -180,7 +174,7 @@ export default function Doc(props: DocProps): JSX.Element {
       }
       return {
         doc: doc.toJSON(),
-        version: getVersion(view.state) ?? 0,
+        version: getVersion(editor.state) ?? 0,
         unconfirmed: unconfirmed.map((u) => u.step.toJSON()),
       };
     };
@@ -201,13 +195,32 @@ export default function Doc(props: DocProps): JSX.Element {
       saveTimer = setTimeout(persist, 3000);
     };
 
+    // Report the doc's title (first non-empty top-level line, else "Untitled")
+    // to the parent, but only when it actually changes — this fires on every
+    // doc-changed transaction, so we don't want to churn the store per keystroke.
+    let lastTitle: string | undefined;
+    const reportTitle = () => {
+      if (!props.onTitle) return;
+      let title = "";
+      editor.state.doc.forEach((node) => {
+        if (title) return;
+        const text = node.textContent.trim();
+        if (text) title = text.slice(0, 80);
+      });
+      const next = title || "Untitled";
+      if (next !== lastTitle) {
+        lastTitle = next;
+        props.onTitle(next);
+      }
+    };
+
     const send = (msg: ClientMessage) => socket?.send(JSON.stringify(msg));
 
     /** Send the next pending commit, if we're allowed to right now. */
     const trySend = () => {
       if (halted || !initialized || inflightRef !== null) return;
       if (!socket || socket.readyState !== WebSocket.OPEN) return;
-      const commit = sendableCommit(view.state);
+      const commit = sendableCommit(editor.state);
       if (!commit) return;
       inflightRef = commit.ref;
       send({ type: "commit", commit: commit.toJSON() });
@@ -221,7 +234,7 @@ export default function Doc(props: DocProps): JSX.Element {
       // re-seed cleanly from the server authority.
       if (saveTimer) clearTimeout(saveTimer);
       void deleteCachedDoc(props.room);
-      view.setProps({ editable: () => false });
+      editor.setEditable(false);
       setDocStatus("halted");
       console.error(`[Doc:${props.room}] halted — ${reason}`);
     };
@@ -238,9 +251,10 @@ export default function Doc(props: DocProps): JSX.Element {
         // First snapshot: seed the collab plugin with the server's doc+version.
         // Set `initialized` before updateState so `editable` is re-read as true.
         initialized = true;
-        view.updateState(
-          view.state.apply(initCollabState(view.state, msg.version, msg.doc)),
+        editor.view.dispatch(
+          initCollabState(editor.state, msg.version, msg.doc),
         );
+        editor.setEditable(!halted);
         setDocStatus("connected");
         schedulePersist();
         trySend();
@@ -252,7 +266,7 @@ export default function Doc(props: DocProps): JSX.Element {
       // Whatever we had in flight may or may not have landed; we'll resubmit
       // after the catch-up, and a duplicate is harmless (matched by ref).
       inflightRef = null;
-      const current = getVersion(view.state) ?? 0;
+      const current = getVersion(editor.state) ?? 0;
       if (msg.version > current) {
         resyncTarget = msg.version;
         setDocStatus("syncing");
@@ -269,9 +283,10 @@ export default function Doc(props: DocProps): JSX.Element {
           `[Doc:${props.room}] local state (v${current}) is ahead of server (v${msg.version}); resetting to server snapshot`,
         );
         resyncTarget = null;
-        view.updateState(
-          view.state.apply(initCollabState(view.state, msg.version, msg.doc)),
+        editor.view.dispatch(
+          initCollabState(editor.state, msg.version, msg.doc),
         );
+        editor.setEditable(!halted);
         setDocStatus("connected");
         schedulePersist();
         trySend();
@@ -282,16 +297,14 @@ export default function Doc(props: DocProps): JSX.Element {
     };
 
     const handleCommit = (commitJSON: CommitJSON) => {
-      const commit = Commit.FromJSON(view.state.schema, commitJSON);
-      view.updateState(
-        view.state.apply(receiveCommitTransaction(view.state, commit)),
-      );
+      const commit = Commit.FromJSON(editor.state.schema, commitJSON);
+      editor.view.dispatch(receiveCommitTransaction(editor.state, commit));
 
       // Our own commit came back — clear the gate so we can send the next one.
       if (inflightRef !== null && commit.ref === inflightRef) inflightRef = null;
 
       // Reconnect catch-up: once we've replayed up to the target, go live.
-      if (resyncTarget !== null && (getVersion(view.state) ?? 0) >= resyncTarget) {
+      if (resyncTarget !== null && (getVersion(editor.state) ?? 0) >= resyncTarget) {
         resyncTarget = null;
         setDocStatus("connected");
       }
@@ -327,19 +340,26 @@ export default function Doc(props: DocProps): JSX.Element {
       }
     };
 
-    // --- Editor view -------------------------------------------------------
-    view = new EditorView(mount, {
-      // Starts empty; we seed the collab state locally (from cache, else an
-      // empty doc) before connecting, so the editor is editable offline and at
-      // all times — `initialized` only gates the sub-frame before that seed,
-      // and `halted` is the one hard stop (schema mismatch).
-      state: EditorState.create({ schema, plugins: editorPlugins() }),
-      editable: () => initialized && !halted,
-      dispatchTransaction(tr: Transaction) {
-        view.updateState(view.state.apply(tr));
-        if (tr.docChanged) schedulePersist();
-        trySend();
-      },
+    // --- Editor ------------------------------------------------------------
+    // Tiptap owns the EditorView; the collab authority plugin is folded in via
+    // the `Collab` extension. Starts non-editable and empty; we seed the collab
+    // state locally (from cache, else an empty doc) before connecting, then flip
+    // editable on. `halted` (schema mismatch) is the one hard stop.
+    editor = new Editor({
+      element: mount,
+      extensions: [...allExtensions, Collab],
+      editable: false,
+      content: "",
+    });
+    // The post-transaction work the old `dispatchTransaction` did: persist on
+    // doc changes and ship the next pending commit. Fires for local edits and
+    // for the collab transactions we dispatch below alike.
+    editor.on("transaction", ({ transaction }) => {
+      if (transaction.docChanged) {
+        schedulePersist();
+        reportTitle();
+      }
+      trySend();
     });
 
     // --- Socket ------------------------------------------------------------
@@ -372,9 +392,8 @@ export default function Doc(props: DocProps): JSX.Element {
     // true or the editor stays contenteditable=false until the next update.
     const seedEmpty = () => {
       initialized = true;
-      view.updateState(
-        view.state.apply(initCollabState(view.state, 0, emptyDocJSON())),
-      );
+      editor.view.dispatch(initCollabState(editor.state, 0, emptyDocJSON()));
+      editor.setEditable(!halted);
     };
 
     void loadCachedDoc(props.room).then((cached) => {
@@ -384,21 +403,20 @@ export default function Doc(props: DocProps): JSX.Element {
           if (cached) {
             initialized = true;
             // Seed the confirmed authority state from the cached base...
-            view.updateState(
-              view.state.apply(
-                initCollabState(view.state, cached.version, cached.doc),
-              ),
+            editor.view.dispatch(
+              initCollabState(editor.state, cached.version, cached.doc),
             );
             // ...then replay the unconfirmed steps as local edits, so the
             // collab plugin tracks them as pending and trySend() ships them
             // once we're connected.
             if (cached.unconfirmed.length) {
-              const tr = view.state.tr;
+              const tr = editor.state.tr;
               for (const stepJSON of cached.unconfirmed) {
-                tr.step(Step.fromJSON(view.state.schema, stepJSON));
+                tr.step(Step.fromJSON(editor.state.schema, stepJSON));
               }
-              if (tr.docChanged) view.updateState(view.state.apply(tr));
+              if (tr.docChanged) editor.view.dispatch(tr);
             }
+            editor.setEditable(!halted);
           } else {
             seedEmpty();
           }
@@ -417,7 +435,7 @@ export default function Doc(props: DocProps): JSX.Element {
       if (saveTimer) clearTimeout(saveTimer);
       persist(); // flush the latest doc before unmount
       socket?.close();
-      view.destroy();
+      editor.destroy();
     });
   });
 

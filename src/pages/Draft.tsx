@@ -1,12 +1,11 @@
 import { A, useParams } from "@solidjs/router";
 import { createSignal, Show } from "solid-js";
 import Doc from "../components/Doc";
-import Sidebar from "../components/Sidebar";
 import { usePages } from "../stores/pages";
 
 export default function Draft() {
   const params = useParams();
-  const { pages, refetch } = usePages();
+  const { refetch, noteLocalPage } = usePages();
 
   const [saving, setSaving] = createSignal(false);
   const [saveError, setSaveError] = createSignal<string | null>(null);
@@ -32,31 +31,21 @@ export default function Draft() {
   }
 
   return (
-    <main class="page-shell draft-layout">
-      {/* Renders immediately and fills in once /api/pages resolves. */}
-      <Sidebar pages={pages} activeId={params.id} />
-      <section class="page-card">
-        <p class="eyebrow">Draft</p>
-        <h1>{params.id}</h1>
-        {/*
-          The route `:id` is the document id. We pass it straight through as
-          the room name, which routes the socket to the DocumentServer Durable
-          Object instance named `:id` — i.e. one authority per draft id.
-          `keyed` re-mounts the editor (new socket) when the id changes.
-        */}
-        <Show when={params.id} keyed>
-          {(id) => <Doc room={id} />}
-        </Show>
-        <div class="actions">
+    <main class="w-full relative">
+      <div class="flex p-3 px-4 gap-4 justify-end fixed top-0 right-0">
+        <div class="grid content-end">
           <button class="button primary" disabled={saving()} onClick={savePage}>
-            {saving() ? "Saving…" : "Save to my drafts"}
+            {saving() ? "Saving…" : saveError() || "Save to my drafts"}
           </button>
-          <A class="button" href="/">
-            Back home
-          </A>
+          {/*<Show when={saveError()}>
+            <p class="save-error">{saveError()}</p>
+          </Show>*/}
         </div>
-        <Show when={saveError()}>
-          <p class="save-error">{saveError()}</p>
+      </div>
+
+      <section class="mx-auto w-full max-w-4xl my-16 px-6">
+        <Show when={params.id} keyed>
+          {(id) => <Doc room={id} onTitle={(title) => noteLocalPage(id, title)} />}
         </Show>
       </section>
     </main>
