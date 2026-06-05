@@ -7,6 +7,8 @@ import type { ClientMessage, ServerMessage } from "./protocol";
 
 export interface Env {
   DocumentServer: DurableObjectNamespace<DocumentServer>;
+  /** Static SPA assets, served for any request the worker doesn't handle. */
+  ASSETS: Fetcher;
 }
 
 // --- Storage keys -----------------------------------------------------------
@@ -209,7 +211,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     return (
       (await routePartykitRequest(request, env)) ??
-      new Response("Not Found", { status: 404 })
+      env.ASSETS.fetch(request)
     );
   },
 } satisfies ExportedHandler<Env>;
