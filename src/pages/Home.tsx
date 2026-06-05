@@ -1,23 +1,11 @@
-import { A } from '@solidjs/router'
-
 export default function Home() {
   return (
-    <main class="page-shell">
-      <section class="page-card hero-card">
-        <p class="eyebrow">Drafts</p>
-        <h1>Write together, revise faster.</h1>
-        <p>
-          Open a draft, invite collaborators, and keep focused on the next edit.
-        </p>
-        <div class="actions">
-          <A class="button primary" href="/draft/welcome">
-            Open sample draft
-          </A>
-          <A class="button" href="/settings">
-            Settings
-          </A>
-        </div>
-      </section>
+    <main class="max-w-xs mx-auto my-44">
+      <h1 class="text-5xl text-center mb-8">tldraft</h1>
+      <p>
+        Realtime collaborative text editing that also works completely offline, including creating and editing new
+        pages.
+      </p>
     </main>
-  )
+  );
 }

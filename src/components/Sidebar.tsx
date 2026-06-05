@@ -32,7 +32,7 @@ export default function Sidebar(props: { activeId?: string }) {
       <header class="flex gap-0 *:block *:p-3 *:py-1.5 justify-between">
         <A href="/">Drafts</A>
         <button type="button" onClick={() => navigate(`/draft/${crypto.randomUUID()}`)}>
-          New page
+          + new page
         </button>
       </header>
 
@@ -61,10 +61,7 @@ export default function Sidebar(props: { activeId?: string }) {
             </div>
           }
         >
-          <Show
-            when={saved().length || unsaved().length}
-            fallback={<p class="sidebar-status">No drafts yet.</p>}
-          >
+          <Show when={saved().length || unsaved().length} fallback={<p class="sidebar-status">No drafts yet.</p>}>
             <Show when={saved().length}>
               <Show when={unsaved().length}>
                 <p class="opacity-50 px-3">Saved</p>

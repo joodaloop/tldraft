@@ -1,7 +1,6 @@
 import { Route, Router, useParams } from "@solidjs/router";
 import Draft from "./pages/Draft";
 import Home from "./pages/Home";
-import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import Sidebar from "./components/Sidebar";
 import { PagesProvider } from "./stores/pages";
@@ -24,7 +23,6 @@ function App() {
     <Router root={(props) => <AppLayout>{props.children}</AppLayout>}>
       <Route path="/" component={Home} />
       <Route path="/draft/:id" component={Draft} />
-      <Route path="/login" component={Login} />
       <Route path="/settings" component={Settings} />
     </Router>
   );

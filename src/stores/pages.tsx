@@ -1,5 +1,6 @@
 import {
   createContext,
+  createEffect,
   createResource,
   createSignal,
   onMount,
@@ -47,7 +48,6 @@ async function fetchPages(): Promise<PageEntry[]> {
   if (res.status === 401) throw new Error("unauthorized");
   if (!res.ok) throw new Error(`failed to load pages (${res.status})`);
   const data = (await res.json()) as { pages: PageEntry[] };
-  saveCachedList(data.pages); // warm the cache for the next load
   return data.pages;
 }
 
@@ -126,6 +126,28 @@ interface PagesStore {
 
 const PagesContext = createContext<PagesStore>();
 
+function usableTitle(title: string | undefined): string | undefined {
+  const trimmed = title?.trim();
+  return trimmed && trimmed !== "Untitled" ? trimmed : undefined;
+}
+
+function isPlaceholderServerTitle(page: PageEntry): boolean {
+  const title = page.title?.trim();
+  return !title || title === "Untitled" || title === page.page_id;
+}
+
+function displayTitle(
+  page: PageEntry,
+  localTitle: string | undefined,
+  cachedTitle: string | undefined,
+): string {
+  if (isPlaceholderServerTitle(page)) {
+    return usableTitle(localTitle) ?? usableTitle(cachedTitle) ?? page.title ?? "Untitled";
+  }
+
+  return usableTitle(localTitle) ?? page.title ?? "Untitled";
+}
+
 /**
  * Holds the user's drafts at the app root so they're resolved once on load and
  * shared across routes. The server list is seeded synchronously from a
@@ -167,15 +189,21 @@ export function PagesProvider(props: ParentProps) {
   const serverPages = () => (serverReady() ? server() ?? [] : cached ?? []);
 
   const localTitles = () => new Map(local().map((p) => [p.page_id, p.title]));
+  const cachedTitles = () => new Map((cached ?? []).map((p) => [p.page_id, p.title]));
   const saved = () => {
     const titles = localTitles();
+    const cached = cachedTitles();
     return serverPages().map((p) => ({
       ...p,
-      title: titles.get(p.page_id) ?? p.title ?? "Untitled",
+      title: displayTitle(p, titles.get(p.page_id), cached.get(p.page_id)),
     }));
   };
   const savedIds = () => new Set(serverPages().map((p) => p.page_id));
   const unsaved = () => local().filter((p) => !savedIds().has(p.page_id));
+
+  createEffect(() => {
+    if (serverReady()) saveCachedList(saved());
+  });
 
   const loading = () =>
     cached === null &&
