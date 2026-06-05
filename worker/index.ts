@@ -4,8 +4,9 @@ import type { CommitJSON, NodeJSON } from "@stepwisehq/prosemirror-collab-commit
 
 import { schema, emptyDocJSON, SCHEMA_VERSION } from "../shared/schema";
 import { migrateDoc } from "../shared/migrations";
+import { pageTextFromDoc } from "../shared/pageText";
 import { routeApiRequest } from "./api";
-import type { ClientMessage, ServerMessage } from "./protocol";
+import { clientMessageSchema, type ClientMessage, type ServerMessage } from "./protocol";
 
 export interface Env {
   DocumentServer: DurableObjectNamespace<DocumentServer>;
@@ -151,7 +152,12 @@ export class DocumentServer extends Server<Env> {
     let msg: ClientMessage;
     try {
       const text = typeof raw === "string" ? raw : new TextDecoder().decode(raw);
-      msg = JSON.parse(text) as ClientMessage;
+      const parsed = clientMessageSchema.safeParse(JSON.parse(text));
+      if (!parsed.success) {
+        this.#send(connection, { type: "error", message: "invalid message shape" });
+        return;
+      }
+      msg = parsed.data;
     } catch {
       this.#send(connection, { type: "error", message: "invalid JSON" });
       return;
@@ -199,6 +205,16 @@ export class DocumentServer extends Server<Env> {
     }
 
     const since = await this.#commitsSince(base);
+    if (since.length !== this.#version - base) {
+      this.#send(connection, {
+        type: "error",
+        ref: incoming.ref,
+        message:
+          `commit base version ${base} can no longer be rebased because ` +
+          `history before head ${this.#version} is unavailable; reload to resync`,
+      });
+      return;
+    }
 
     let result: { docJSON: NodeJSON; commitJSON: CommitJSON };
     try {
@@ -215,22 +231,28 @@ export class DocumentServer extends Server<Env> {
     }
 
     const applied = result.commitJSON; // version === previous #version + 1
-    this.#doc = result.docJSON;
-    this.#version = applied.version;
-
-    // Append to the in-memory window and drop the oldest if it overflows. The
-    // durable write below keeps the full history regardless.
-    this.#log.push(applied);
-    if (this.#log.length > DocumentServer.MAX_INMEMORY_COMMITS) {
-      this.#log.splice(0, this.#log.length - DocumentServer.MAX_INMEMORY_COMMITS);
-    }
+    const nextDoc = result.docJSON;
+    const nextVersion = applied.version;
 
     await this.ctx.storage.put({
-      [VERSION_KEY]: this.#version,
-      [DOC_KEY]: this.#doc,
-      [commitKey(this.#version)]: applied,
+      [VERSION_KEY]: nextVersion,
+      [DOC_KEY]: nextDoc,
+      [commitKey(nextVersion)]: applied,
     });
-    await this.ctx.storage.setAlarm(Date.now() + DocumentServer.IDLE_UPDATE_DELAY_MS);
+
+    const nextLog = [...this.#log, applied];
+    if (nextLog.length > DocumentServer.MAX_INMEMORY_COMMITS) {
+      nextLog.splice(0, nextLog.length - DocumentServer.MAX_INMEMORY_COMMITS);
+    }
+    this.#doc = nextDoc;
+    this.#version = nextVersion;
+    this.#log = nextLog;
+
+    try {
+      await this.ctx.storage.setAlarm(Date.now() + DocumentServer.IDLE_UPDATE_DELAY_MS);
+    } catch (err) {
+      console.error("[DocumentServer] failed to schedule page metadata refresh", err);
+    }
 
     // Broadcast to *everyone*, including the submitter. The submitter matches
     // `applied.ref` to confirm its own pending steps; others apply it as a
@@ -310,9 +332,7 @@ export class DocumentServer extends Server<Env> {
 
   #pageText(): [title: string, body: string] {
     const doc = schema.nodeFromJSON(this.#doc);
-    const body = doc.textContent;
-    const title = body.split(/\r?\n/, 1)[0]?.trim() || this.name;
-    return [title, body];
+    return pageTextFromDoc(doc, this.name);
   }
 }
 

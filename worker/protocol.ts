@@ -1,4 +1,13 @@
 import type { CommitJSON, NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
+import { z } from "zod";
+
+const nodeJSONSchema = z.object({}).catchall(z.unknown());
+const stepJSONSchema = z.object({}).catchall(z.unknown());
+export const commitJSONSchema = z.object({
+  version: z.number().int().finite(),
+  ref: z.string(),
+  steps: z.array(stepJSONSchema),
+}) satisfies z.ZodType<CommitJSON>;
 
 /**
  * Wire protocol between a client and the document authority.
@@ -20,6 +29,11 @@ export type ClientMessage =
    */
   | { type: "sync"; version: number };
 
+export const clientMessageSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("commit"), commit: commitJSONSchema }),
+  z.object({ type: z.literal("sync"), version: z.number().int().finite() }),
+]) satisfies z.ZodType<ClientMessage>;
+
 /** Messages the authority sends to a client. */
 export type ServerMessage =
   /** Full snapshot. Sent on connect and as a fallback for `sync`. */
@@ -32,3 +46,18 @@ export type ServerMessage =
   | { type: "commit"; commit: CommitJSON }
   /** A commit was rejected (bad base version, schema failure, etc.). */
   | { type: "error"; message: string; ref?: string };
+
+export const serverMessageSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("init"),
+    version: z.number().int().finite(),
+    doc: nodeJSONSchema,
+    schemaVersion: z.number().int().finite(),
+  }),
+  z.object({ type: z.literal("commit"), commit: commitJSONSchema }),
+  z.object({
+    type: z.literal("error"),
+    message: z.string(),
+    ref: z.string().optional(),
+  }),
+]) satisfies z.ZodType<ServerMessage>;

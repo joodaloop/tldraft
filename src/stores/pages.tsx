@@ -8,6 +8,7 @@ import {
   type ParentProps,
 } from "solid-js";
 import type { NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
+import { pageTitleFromDocJSON } from "../../shared/pageText";
 
 export interface PageEntry {
   page_id: string;
@@ -48,28 +49,6 @@ async function fetchPages(): Promise<PageEntry[]> {
   const data = (await res.json()) as { pages: PageEntry[] };
   saveCachedList(data.pages); // warm the cache for the next load
   return data.pages;
-}
-
-// --- Titles -----------------------------------------------------------------
-// A draft's display name is its first non-empty line — the title heading if the
-// user filled it in, otherwise the first body line, otherwise "Untitled".
-function nodeText(node: unknown): string {
-  if (!node || typeof node !== "object") return "";
-  const n = node as { text?: unknown; content?: unknown };
-  if (typeof n.text === "string") return n.text;
-  if (Array.isArray(n.content)) return n.content.map(nodeText).join("");
-  return "";
-}
-
-export function docTitle(doc: NodeJSON): string {
-  const blocks = Array.isArray((doc as { content?: unknown }).content)
-    ? ((doc as { content: unknown[] }).content as unknown[])
-    : [];
-  for (const block of blocks) {
-    const text = nodeText(block).trim();
-    if (text) return text.slice(0, 80);
-  }
-  return "Untitled";
 }
 
 // --- Local scan (IndexedDB) -------------------------------------------------
@@ -113,7 +92,7 @@ async function scanLocalPages(): Promise<PageEntry[]> {
       out.push({
         page_id: key,
         created_at: "",
-        title: doc ? docTitle(doc) : "Untitled",
+        title: doc ? pageTitleFromDocJSON(doc, "Untitled").slice(0, 80) : "Untitled",
       });
     });
     return out;

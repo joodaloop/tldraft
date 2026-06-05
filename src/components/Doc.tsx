@@ -10,6 +10,7 @@ import {
 } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 import { Step } from "prosemirror-transform";
 import { PartySocket } from "partysocket";
+import { z } from "zod";
 
 import type {
   CommitJSON,
@@ -19,7 +20,12 @@ import type {
 import { allExtensions } from "../../extensions";
 import { Collab } from "./collabExtension";
 import { emptyDocJSON, SCHEMA_VERSION } from "../../shared/schema";
-import type { ClientMessage, ServerMessage } from "../../worker/protocol";
+import { pageTextFromDoc } from "../../shared/pageText";
+import {
+  serverMessageSchema,
+  type ClientMessage,
+  type ServerMessage,
+} from "../../worker/protocol";
 
 import "prosemirror-view/style/prosemirror.css";
 
@@ -51,6 +57,13 @@ interface CachedDoc {
   unconfirmed: unknown[];
 }
 
+const cachedDocSchema = z.object({
+  schemaVersion: z.number().int().finite(),
+  doc: z.object({}).catchall(z.unknown()),
+  version: z.number().int().finite(),
+  unconfirmed: z.array(z.unknown()),
+});
+
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
@@ -63,11 +76,13 @@ function openDB(): Promise<IDBDatabase> {
 async function loadCachedDoc(room: string): Promise<CachedDoc | null> {
   try {
     const db = await openDB();
-    return await new Promise<CachedDoc | null>((resolve, reject) => {
+    const cached = await new Promise<unknown>((resolve, reject) => {
       const req = db.transaction(STORE, "readonly").objectStore(STORE).get(room);
-      req.onsuccess = () => resolve((req.result as CachedDoc | undefined) ?? null);
+      req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
     });
+    const parsed = cachedDocSchema.safeParse(cached);
+    return parsed.success ? parsed.data : null;
   } catch {
     return null; // no IndexedDB / private mode — just skip the cache
   }
@@ -162,6 +177,7 @@ export default function Doc(props: DocProps): JSX.Element {
     // Set once the view is torn down, so a late IndexedDB load doesn't connect.
     let disposed = false;
     let saveTimer: ReturnType<typeof setTimeout> | undefined;
+    let cacheWrite: Promise<void> = Promise.resolve();
 
     /**
      * Split the current editor state into the confirmed base doc + the
@@ -193,8 +209,14 @@ export default function Doc(props: DocProps): JSX.Element {
       // dropped the cache on purpose — don't let a debounced write resurrect it.
       if (!initialized || halted) return;
       const snap = snapshot();
-      // Fire-and-forget: the write is async and must not block the main thread.
-      if (snap) void saveCachedDoc(props.room, snap);
+      // Fire-and-forget, but serialize writes so an older IndexedDB transaction
+      // can't finish after a newer snapshot and overwrite it.
+      if (snap) {
+        cacheWrite = cacheWrite
+          .catch(() => undefined)
+          .then(() => saveCachedDoc(props.room, snap));
+        void cacheWrite;
+      }
     };
 
     /** Cache the current doc, debounced 3s after the last update. */
@@ -203,19 +225,14 @@ export default function Doc(props: DocProps): JSX.Element {
       saveTimer = setTimeout(persist, 3000);
     };
 
-    // Report the doc's title (first non-empty top-level line, else "Untitled")
+    // Report the doc's title (first non-empty line, else "Untitled")
     // to the parent, but only when it actually changes — this fires on every
     // doc-changed transaction, so we don't want to churn the store per keystroke.
     let lastTitle: string | undefined;
     const reportTitle = () => {
       if (!props.onTitle) return;
-      let title = "";
-      editor.state.doc.forEach((node) => {
-        if (title) return;
-        const text = node.textContent.trim();
-        if (text) title = text.slice(0, 80);
-      });
-      const next = title || "Untitled";
+      const [title] = pageTextFromDoc(editor.state.doc, "Untitled");
+      const next = title.slice(0, 80);
       if (next !== lastTitle) {
         lastTitle = next;
         props.onTitle(next);
@@ -276,6 +293,20 @@ export default function Doc(props: DocProps): JSX.Element {
       inflightRef = null;
       const current = getVersion(editor.state) ?? 0;
       if (msg.version > current) {
+        if (resyncTarget !== null) {
+          console.warn(
+            `[Doc:${props.room}] server could not replay history from v${current}; resetting to snapshot v${msg.version}`,
+          );
+          resyncTarget = null;
+          editor.view.dispatch(
+            initCollabState(editor.state, msg.version, msg.doc),
+          );
+          editor.setEditable(!halted);
+          setDocStatus("connected");
+          schedulePersist();
+          trySend();
+          return;
+        }
         resyncTarget = msg.version;
         setDocStatus("syncing");
         send({ type: "sync", version: current });
@@ -324,27 +355,36 @@ export default function Doc(props: DocProps): JSX.Element {
     const handleMessage = (raw: string) => {
       let msg: ServerMessage;
       try {
-        msg = JSON.parse(raw) as ServerMessage;
+        const parsed = serverMessageSchema.safeParse(JSON.parse(raw));
+        if (!parsed.success) {
+          halt("server sent an invalid message");
+          return;
+        }
+        msg = parsed.data;
       } catch {
         return;
       }
-      switch (msg.type) {
-        case "init":
-          handleInit(msg);
-          break;
-        case "commit":
-          handleCommit(msg.commit);
-          break;
-        case "error":
-          // A rejected commit (bad base version or invalid against the schema).
-          // We can't safely retry the same steps, so stop sending and surface
-          // it. A reload re-seeds from the authority.
-          if (msg.ref && msg.ref === inflightRef) {
-            halt(`commit rejected: ${msg.message}`);
-          } else {
-            console.warn(`[Doc:${props.room}] server error: ${msg.message}`);
-          }
-          break;
+      try {
+        switch (msg.type) {
+          case "init":
+            handleInit(msg);
+            break;
+          case "commit":
+            handleCommit(msg.commit);
+            break;
+          case "error":
+            // A rejected commit (bad base version or invalid against the schema).
+            // We can't safely retry the same steps, so stop sending and surface
+            // it. A reload re-seeds from the authority.
+            if (msg.ref && msg.ref === inflightRef) {
+              halt(`commit rejected: ${msg.message}`);
+            } else {
+              console.warn(`[Doc:${props.room}] server error: ${msg.message}`);
+            }
+            break;
+        }
+      } catch (err) {
+        halt(`failed to apply server message: ${err instanceof Error ? err.message : String(err)}`);
       }
     };
 

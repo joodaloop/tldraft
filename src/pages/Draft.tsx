@@ -1,4 +1,4 @@
-import { A, useParams } from "@solidjs/router";
+import { useParams } from "@solidjs/router";
 import { createSignal, Show } from "solid-js";
 import Doc from "../components/Doc";
 import { usePages } from "../stores/pages";
