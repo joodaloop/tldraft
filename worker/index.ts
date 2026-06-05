@@ -3,6 +3,7 @@ import { applyCommitJSON } from "@stepwisehq/prosemirror-collab-commit/apply-com
 import type { CommitJSON, NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
 import { schema, emptyDocJSON, SCHEMA_VERSION } from "../shared/schema";
+import { migrateDoc } from "../shared/migrations";
 import { routeApiRequest } from "./api";
 import type { ClientMessage, ServerMessage } from "./protocol";
 
@@ -74,7 +75,7 @@ export class DocumentServer extends Server<Env> {
   }
 
   async onStart() {
-    const stored = await this.ctx.storage.get<unknown>([VERSION_KEY, DOC_KEY]);
+    const stored = await this.ctx.storage.get<unknown>([VERSION_KEY, DOC_KEY, SCHEMA_KEY]);
     const version = stored.get(VERSION_KEY) as number | undefined;
     const doc = stored.get(DOC_KEY) as NodeJSON | undefined;
 
@@ -95,10 +96,44 @@ export class DocumentServer extends Server<Env> {
     } else {
       this.#version = version;
       this.#doc = doc;
+      // Docs without SCHEMA_KEY predate the field; treat them as current (there
+      // are none in practice — SCHEMA_KEY has always been written at creation).
+      const storedSchema = (stored.get(SCHEMA_KEY) as number | undefined) ?? SCHEMA_VERSION;
+      if (storedSchema < SCHEMA_VERSION) {
+        // Migrate before #pageText() below reads the doc through the new schema.
+        await this.#migrateSchema(storedSchema);
+      } else if (stored.get(SCHEMA_KEY) === undefined) {
+        await this.ctx.storage.put({ [SCHEMA_KEY]: SCHEMA_VERSION });
+      }
       await this.env.DB.prepare("INSERT OR IGNORE INTO pages (id, title, body) VALUES (?1, ?2, ?3)")
         .bind(this.name, ...this.#pageText())
         .run();
     }
+  }
+
+  /**
+   * Bring the stored doc from an older schema version up to the current one,
+   * then invalidate the commit log. The log's commits are authored under the old
+   * schema and can't rebase onto the migrated doc, so we drop them and let
+   * reconnecting clients re-`init` from the migrated snapshot (they already
+   * halt+reload on a schemaVersion bump, so they re-seed regardless). An additive
+   * migration registers `identity` and strictly speaking wouldn't need the log
+   * cleared, but we do it uniformly to keep one invariant: the durable log only
+   * ever holds current-schema commits.
+   */
+  async #migrateSchema(from: number) {
+    this.#doc = migrateDoc(this.#doc, from, SCHEMA_VERSION);
+    // Fail loudly rather than persist a doc that doesn't fit the schema.
+    schema.nodeFromJSON(this.#doc).check();
+
+    const old = await this.ctx.storage.list({ prefix: COMMIT_PREFIX });
+    if (old.size > 0) await this.ctx.storage.delete([...old.keys()]);
+    this.#log = [];
+
+    await this.ctx.storage.put({
+      [DOC_KEY]: this.#doc,
+      [SCHEMA_KEY]: SCHEMA_VERSION,
+    });
   }
 
   onConnect(connection: Connection) {

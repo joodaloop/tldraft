@@ -32,6 +32,13 @@ const DB_NAME = "drafts";
 const STORE = "docs";
 
 interface CachedDoc {
+  /**
+   * The schema version `doc` was authored under. A cache entry from a different
+   * schema is ignored on load: the optimistic restore seeds the doc directly
+   * (before the socket connects), so an old-schema doc would otherwise be fed
+   * into the current schema and corrupt or throw.
+   */
+  schemaVersion: number;
   /** The confirmed (server-acknowledged) doc, at `version`. */
   doc: NodeJSON;
   /** The collab version (the strictly increasing counter) `doc` is at. */
@@ -173,6 +180,7 @@ export default function Doc(props: DocProps): JSX.Element {
         doc = result.doc;
       }
       return {
+        schemaVersion: SCHEMA_VERSION,
         doc: doc.toJSON(),
         version: getVersion(editor.state) ?? 0,
         unconfirmed: unconfirmed.map((u) => u.step.toJSON()),
@@ -400,6 +408,13 @@ export default function Doc(props: DocProps): JSX.Element {
       if (disposed) return;
       if (!initialized) {
         try {
+          // Ignore a cache written under a different schema — seeding it into the
+          // current schema would corrupt or throw. The reconnect sync re-seeds
+          // us from the server's snapshot instead.
+          if (cached && cached.schemaVersion !== SCHEMA_VERSION) {
+            void deleteCachedDoc(props.room);
+            cached = null;
+          }
           if (cached) {
             initialized = true;
             // Seed the confirmed authority state from the cached base...
