@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "drafts-collab",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DocumentServer",
+        "class_name": "DocumentServer",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1", // one Durable Object class, SQLite-backed storage
+      "new_sqlite_classes": ["DocumentServer"],
+    },
+  ],
+}
