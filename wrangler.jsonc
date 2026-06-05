@@ -1,9 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "drafts-collab",
+  "name": "tldraft",
   "main": "worker/index.ts",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    // Public OAuth client id. The matching GOOGLE_CLIENT_SECRET and JWT_SECRET
+    // are secrets — set them with `wrangler secret put <NAME>`, not here.
+    "GOOGLE_CLIENT_ID": "929003795507-g61cam74t5ietk10mbbu516qn7qq2vjk.apps.googleusercontent.com",
+  },
   "assets": {
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
@@ -21,7 +26,7 @@
     {
       "binding": "DB",
       "database_name": "drafts",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "c03fb629-a2f4-4115-8caf-cb1ff54a9142",
     },
   ],
   "migrations": [
