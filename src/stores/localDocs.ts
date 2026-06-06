@@ -1,7 +1,7 @@
-import { z } from "zod";
 import { Step } from "prosemirror-transform";
 import type { NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 import { schema } from "../../shared/schema";
+import { cachedDocSchema, type CachedDoc } from "./draftSchemas";
 
 // A best-effort offline cache of each room's latest doc, keyed by room. The
 // editor restores from it on load, and the sidebar scans it to discover local
@@ -9,29 +9,7 @@ import { schema } from "../../shared/schema";
 const DB_NAME = "drafts";
 const STORE = "docs";
 
-export interface CachedDoc {
-  /**
-   * The schema version `doc` was authored under. A cache entry from a different
-   * schema should be ignored before seeding it into the editor.
-   */
-  schemaVersion: number;
-  /** The confirmed (server-acknowledged) doc, at `version`. */
-  doc: NodeJSON;
-  /** The collab version (the strictly increasing counter) `doc` is at. */
-  version: number;
-  /**
-   * Local steps the server hasn't confirmed yet, as step JSON, in order.
-   * Re-applied on restore so in-flight edits survive a reload.
-   */
-  unconfirmed: unknown[];
-  /** ISO timestamp of the last genuine local doc edit. */
-  updatedAt?: string;
-  /**
-   * True for a draft that was created locally while the document authority was
-   * unreachable. Cleared once it reconnects and has no unconfirmed steps left.
-   */
-  offline?: boolean;
-}
+export type { CachedDoc };
 
 export interface LocalDocRecord {
   room: string;
@@ -43,16 +21,6 @@ export interface LocalDocRecord {
    */
   visibleDoc: NodeJSON;
 }
-
-const cachedDocSchema = z.object({
-  schemaVersion: z.number().int().finite(),
-  doc: z.object({}).catchall(z.unknown()),
-  version: z.number().int().finite(),
-  unconfirmed: z.array(z.unknown()),
-  // Optional: entries cached before this field existed still load.
-  updatedAt: z.string().optional(),
-  offline: z.boolean().optional(),
-});
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {

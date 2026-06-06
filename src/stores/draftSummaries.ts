@@ -1,32 +1,11 @@
-export type DraftRelationship = "opened" | "manual" | "creator";
+export type {
+  DraftRelationship,
+  DraftSummary,
+  LocalDraftRow,
+  ServerDraftRow,
+} from "./draftSchemas";
 
-export interface ServerDraftRow {
-  page_id: string;
-  created_at: string;
-  updated_at?: string;
-  title?: string;
-  relationship?: DraftRelationship;
-  offline?: boolean;
-}
-
-export interface LocalDraftRow {
-  page_id: string;
-  created_at: "";
-  updated_at?: string;
-  title?: string;
-  offline?: boolean;
-}
-
-export interface DraftSummary {
-  id: string;
-  page_id: string;
-  title: string;
-  created_at: string;
-  updated_at?: string;
-  relationship?: DraftRelationship;
-  offline: boolean;
-  source: "server" | "local" | "merged";
-}
+import type { DraftSummary, LocalDraftRow, ServerDraftRow } from "./draftSchemas";
 
 function usableTitle(title: string | undefined): string | undefined {
   const trimmed = title?.trim();

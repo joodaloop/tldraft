@@ -17,6 +17,7 @@ import {
   type LocalDraftRow,
   type ServerDraftRow,
 } from "./draftSummaries";
+import { serverDraftRowsSchema } from "./draftSchemas";
 
 // --- Server list cache (localStorage) ---------------------------------------
 // We persist the last successful /api/pages response so the next load can paint
@@ -28,7 +29,8 @@ function loadCachedList(): ServerDraftRow[] | null {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw) as unknown;
-    return Array.isArray(data) ? (data as ServerDraftRow[]) : null;
+    const parsed = serverDraftRowsSchema.safeParse(data);
+    return parsed.success ? parsed.data : null;
   } catch {
     return null; // no localStorage / corrupt JSON — just no warm cache
   }
@@ -47,8 +49,10 @@ async function fetchPages(): Promise<ServerDraftRow[]> {
   const res = await fetch("/api/pages", { credentials: "include" });
   if (res.status === 401) throw new Error("unauthorized");
   if (!res.ok) throw new Error(`failed to load pages (${res.status})`);
-  const data = (await res.json()) as { pages: ServerDraftRow[] };
-  return data.pages;
+  const data = (await res.json()) as { pages?: unknown };
+  const parsed = serverDraftRowsSchema.safeParse(data.pages);
+  if (!parsed.success) throw new Error("invalid pages response");
+  return parsed.data;
 }
 
 async function scanLocalPages(): Promise<LocalDraftRow[]> {

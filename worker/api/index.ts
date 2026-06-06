@@ -144,7 +144,7 @@ async function addPage(request: Request, env: Env, pageId: string): Promise<Resp
   const userId = await currentUserId(request, env);
   if (!userId) return json({ error: "unauthorized" }, { status: 401 });
 
-  await linkUserToPage(env, userId, pageId, "manual");
+  await linkUserToPage(env, userId, pageId, "opened");
 
   return json({ ok: true, pageId });
 }

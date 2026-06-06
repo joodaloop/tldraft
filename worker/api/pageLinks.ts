@@ -1,6 +1,6 @@
 import type { Env } from "../index";
 
-export type PageRelationship = "opened" | "manual" | "creator";
+export type PageRelationship = "opened" | "creator";
 
 interface PageCreatorRow {
   created_by: string | null;
@@ -9,8 +9,8 @@ interface PageCreatorRow {
 /**
  * Link a page to a user without downgrading a stronger existing relationship.
  *
- * Precedence is: creator > manual > opened. That way opening a page never
- * erases an explicit save, and clicking Save can promote an opened page.
+ * Precedence is: creator > opened. That way opening a page never downgrades a
+ * creator row.
  */
 export async function linkUserToPage(
   env: Env,
@@ -25,8 +25,6 @@ export async function linkUserToPage(
        relationship = CASE
          WHEN user_pages.relationship = 'creator' THEN 'creator'
          WHEN excluded.relationship = 'creator' THEN 'creator'
-         WHEN user_pages.relationship = 'manual' THEN 'manual'
-         WHEN excluded.relationship = 'manual' THEN 'manual'
          ELSE 'opened'
        END`,
   )

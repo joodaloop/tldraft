@@ -5,6 +5,13 @@ import type { DraftSummary } from "../stores/draftSummaries";
 
 type SortKey = "created" | "modified" | "name";
 
+const SORT_STORAGE_KEY = "sidebar-sort";
+
+function loadSort(): SortKey {
+  const stored = localStorage.getItem(SORT_STORAGE_KEY);
+  return stored === "created" || stored === "modified" || stored === "name" ? stored : "created";
+}
+
 // Local-only drafts have no updated_at (and a blank created_at), so they sort to
 // the bottom under created/modified until the server links them.
 function comparePages(a: DraftSummary, b: DraftSummary, key: SortKey): number {
@@ -27,7 +34,12 @@ function comparePages(a: DraftSummary, b: DraftSummary, key: SortKey): number {
 export default function Sidebar(props: { activeId?: string }) {
   const { pages, loading, signedOut } = usePages();
   const navigate = useNavigate();
-  const [sortBy, setSortBy] = createSignal<SortKey>("created");
+  const [sortBy, setSortBy] = createSignal<SortKey>(loadSort());
+
+  const changeSort = (key: SortKey) => {
+    setSortBy(key);
+    localStorage.setItem(SORT_STORAGE_KEY, key);
+  };
 
   const sortedPages = createMemo(() => [...pages()].sort((a, b) => comparePages(a, b, sortBy())));
 
@@ -53,8 +65,8 @@ export default function Sidebar(props: { activeId?: string }) {
       aria-label="Your drafts"
     >
       <header class="flex gap-0 justify-between items-center">
-        <A class="px-2" href="/">
-          Drafts
+        <A class="px-2 font-bold" href="/">
+          tldraft
         </A>
         <div class="flex items-center gap-0">
           <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
@@ -63,7 +75,7 @@ export default function Sidebar(props: { activeId?: string }) {
               class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               aria-label="Sort drafts"
               value={sortBy()}
-              onChange={(e) => setSortBy(e.currentTarget.value as SortKey)}
+              onChange={(e) => changeSort(e.currentTarget.value as SortKey)}
             >
               <option value="created">created</option>
               <option value="modified">modified</option>
@@ -94,7 +106,14 @@ export default function Sidebar(props: { activeId?: string }) {
           </Show>
         </Show>
 
-        <Show when={pages().length} fallback={<Show when={!signedOut()}><p>No drafts yet.</p></Show>}>
+        <Show
+          when={pages().length}
+          fallback={
+            <Show when={!signedOut()}>
+              <p>No drafts yet.</p>
+            </Show>
+          }
+        >
           <div class="grid gap-1 min-w-0">
             <ul class="min-w-0">
               <For each={sortedPages()}>{Item}</For>
