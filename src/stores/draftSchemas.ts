@@ -13,9 +13,7 @@ export const cachedDocSchema = z.object({
   doc: nodeJSONSchema,
   version: z.number().int().finite(),
   unconfirmed: z.array(z.unknown()),
-  // Optional: entries cached before this field existed still load.
   updatedAt: z.string().optional(),
-  offline: z.boolean().optional(),
 });
 export type CachedDoc = z.infer<typeof cachedDocSchema>;
 
@@ -25,7 +23,6 @@ export const serverDraftRowSchema = z.object({
   updated_at: z.string().optional(),
   title: z.string().optional(),
   relationship: draftRelationshipSchema.optional(),
-  offline: z.boolean().optional(),
 });
 export type ServerDraftRow = z.infer<typeof serverDraftRowSchema>;
 
@@ -36,7 +33,7 @@ export const localDraftRowSchema = z.object({
   created_at: z.literal(""),
   updated_at: z.string().optional(),
   title: z.string().optional(),
-  offline: z.boolean().optional(),
+  hasUnconfirmedChanges: z.boolean().optional(),
 });
 export type LocalDraftRow = z.infer<typeof localDraftRowSchema>;
 
@@ -47,7 +44,7 @@ export const draftSummarySchema = z.object({
   created_at: z.string(),
   updated_at: z.string().optional(),
   relationship: draftRelationshipSchema.optional(),
-  offline: z.boolean(),
+  hasUnconfirmedChanges: z.boolean(),
   source: z.enum(["server", "local", "merged"]),
 });
 export type DraftSummary = z.infer<typeof draftSummarySchema>;

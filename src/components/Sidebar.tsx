@@ -48,8 +48,8 @@ export default function Sidebar(props: { activeId?: string }) {
       <A
         classList={{
           "truncate px-2 py-1 rounded-sm block": true,
-          "bg-chosen": page.page_id === props.activeId && !page.offline,
-          "bg-red-100": !!page.offline,
+          "bg-chosen": page.page_id === props.activeId,
+          "text-red-700": page.hasUnconfirmedChanges && !(page.page_id === props.activeId),
         }}
         href={`/draft/${encodeURIComponent(page.page_id)}`}
         aria-current={page.page_id === props.activeId ? "page" : undefined}

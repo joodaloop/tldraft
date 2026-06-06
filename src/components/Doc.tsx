@@ -17,11 +17,14 @@ export interface DocProps {
   /** Notified whenever the connection status changes. */
   onStatus?: (status: DocStatus) => void;
   /**
-   * Notified with the doc's display title (its first non-empty line, or
-   * "Untitled") on seed and whenever it changes — lets the sidebar list this
-   * draft live, before it's ever saved.
+   * Notified with the doc's display title and whether it has local changes
+   * awaiting server confirmation.
    */
-  onTitle?: (title: string, updatedAt?: string, offline?: boolean) => void;
+  onTitle?: (
+    title: string,
+    updatedAt?: string,
+    hasUnconfirmedChanges?: boolean,
+  ) => void;
 }
 
 export default function Doc(props: DocProps): JSX.Element {

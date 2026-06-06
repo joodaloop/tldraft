@@ -51,10 +51,14 @@ export interface DraftSessionOptions {
   /** Notified whenever the editor should be hidden or visible. */
   onReady?: (ready: boolean) => void;
   /**
-   * Notified with the doc's display title (its first non-empty line, or
-   * "Untitled") on seed and whenever it changes.
+   * Notified with the doc's display title and whether it has local changes
+   * awaiting server confirmation.
    */
-  onTitle?: (title: string, updatedAt?: string, offline?: boolean) => void;
+  onTitle?: (
+    title: string,
+    updatedAt?: string,
+    hasUnconfirmedChanges?: boolean,
+  ) => void;
 }
 
 // The @cloudflare/vite-plugin runs the Worker + Durable Object inside the Vite
@@ -79,7 +83,6 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
   // restored cache (else now) and advanced only by genuine local edits.
   let lastModified = new Date().toISOString();
   let applyingCollab = false;
-  let offline = false;
 
   // Set once the view is torn down, so a late IndexedDB load doesn't connect.
   let disposed = false;
@@ -124,7 +127,6 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
       version: getVersion(editor.state) ?? 0,
       unconfirmed: unconfirmed.map((u) => u.step.toJSON()),
       updatedAt: lastModified,
-      offline,
     };
   };
 
@@ -145,25 +147,25 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
   };
 
   let lastTitle: string | undefined;
+  let lastHasUnconfirmedChanges: boolean | undefined;
   const reportTitle = (force = false) => {
     if (!options.onTitle) return;
     const [title] = pageTextFromDoc(editor.state.doc, "Untitled");
     const next = title.slice(0, 80);
-    if (force || next !== lastTitle) {
+    const hasUnconfirmedChanges = hasUnconfirmedSteps();
+    if (
+      force ||
+      next !== lastTitle ||
+      hasUnconfirmedChanges !== lastHasUnconfirmedChanges
+    ) {
       lastTitle = next;
-      options.onTitle(next, lastModified, offline);
+      lastHasUnconfirmedChanges = hasUnconfirmedChanges;
+      options.onTitle(next, lastModified, hasUnconfirmedChanges);
     }
   };
 
   const hasUnconfirmedSteps = () =>
     (collabKey.getState(editor.state)?.unconfirmed.length ?? 0) > 0;
-
-  const clearOfflineIfSynced = () => {
-    if (!offline || hasUnconfirmedSteps()) return;
-    offline = false;
-    reportTitle(true);
-    persist();
-  };
 
   const send = (msg: ClientMessage) => socket?.send(JSON.stringify(msg));
 
@@ -201,7 +203,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
       setReady(true);
       setDocStatus("connected");
       schedulePersist();
-      clearOfflineIfSynced();
+      reportTitle(true);
       trySend();
       return;
     }
@@ -219,7 +221,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
         setReady(true);
         setDocStatus("connected");
         schedulePersist();
-        clearOfflineIfSynced();
+        reportTitle(true);
         trySend();
         return;
       }
@@ -236,11 +238,11 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
       setReady(true);
       setDocStatus("connected");
       schedulePersist();
-      clearOfflineIfSynced();
+      reportTitle(true);
       trySend();
     } else {
       setDocStatus("connected");
-      clearOfflineIfSynced();
+      reportTitle();
       trySend();
     }
   };
@@ -257,7 +259,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     }
 
     schedulePersist();
-    clearOfflineIfSynced();
+    reportTitle();
     trySend();
   };
 
@@ -311,12 +313,12 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     trySend();
   });
 
-  const seedEmpty = (createdOffline = false) => {
+  const seedEmpty = () => {
     initialized = true;
-    offline = createdOffline;
     dispatchCollab(initCollabState(editor.state, 0, emptyDocJSON()));
     editor.setEditable(!halted);
     setReady(true);
+    reportTitle(true);
   };
 
   const connect = () => {
@@ -333,7 +335,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     socket.addEventListener("message", (e) => handleMessage(e.data as string));
     socket.addEventListener("close", () => {
       if (!halted) {
-        if (!initialized) seedEmpty(true);
+        if (!initialized) seedEmpty();
         setDocStatus("offline");
       }
     });
@@ -350,7 +352,6 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
         if (cached) {
           initialized = true;
           if (cached.updatedAt) lastModified = cached.updatedAt;
-          offline = cached.offline ?? false;
           dispatchCollab(initCollabState(editor.state, cached.version, cached.doc));
 
           if (cached.unconfirmed.length) {
@@ -362,6 +363,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
           }
           editor.setEditable(!halted);
           setReady(true);
+          reportTitle(true);
         }
       } catch (err) {
         console.warn(`[Doc:${options.room}] ignoring bad cache entry`, err);

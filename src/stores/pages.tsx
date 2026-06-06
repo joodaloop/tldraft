@@ -65,14 +65,15 @@ async function scanLocalPages(): Promise<LocalDraftRow[]> {
     created_at: "",
     updated_at: cached.updatedAt,
     title: pageTitleFromDocJSON(visibleDoc, "Untitled").slice(0, 80),
-    offline: cached.offline,
+    hasUnconfirmedChanges: cached.unconfirmed.length > 0,
   }));
 }
 
 interface PagesStore {
   /**
    * Drafts known to this device: the server list merged with the local doc
-   * cache. Offline-created drafts remain in this list and carry `offline`.
+   * cache. Drafts with local steps awaiting confirmation carry
+   * `hasUnconfirmedChanges`.
    */
   pages: Accessor<DraftSummary[]>;
   /** True only when we have nothing to show yet and the fetch is still running. */
@@ -89,7 +90,7 @@ interface PagesStore {
     page_id: string,
     title?: string,
     updated_at?: string,
-    offline?: boolean,
+    hasUnconfirmedChanges?: boolean,
   ) => void;
 }
 
@@ -111,20 +112,24 @@ export function PagesProvider(props: ParentProps) {
     page_id: string,
     title?: string,
     updated_at?: string,
-    offline?: boolean,
+    hasUnconfirmedChanges?: boolean,
   ) => {
     const name = (title ?? "").trim() || "Untitled";
     setLocal((prev) => {
       const i = prev.findIndex((p) => p.page_id === page_id);
       if (i === -1) {
-        return [...prev, { page_id, created_at: "", updated_at, title: name, offline }];
+        return [
+          ...prev,
+          { page_id, created_at: "", updated_at, title: name, hasUnconfirmedChanges },
+        ];
       }
       const next = prev.slice();
       next[i] = {
         ...next[i],
         updated_at: updated_at ?? next[i].updated_at,
         title: name,
-        offline: offline ?? next[i].offline,
+        hasUnconfirmedChanges:
+          hasUnconfirmedChanges ?? next[i].hasUnconfirmedChanges,
       };
       return next;
     });

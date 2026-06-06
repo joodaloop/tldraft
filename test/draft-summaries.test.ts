@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 
 import { buildDraftSummaries } from "../src/stores/draftSummaries";
 
-test("offline local title wins over newly linked server placeholder", () => {
+test("pending local title wins over newly linked server placeholder", () => {
   const [summary] = buildDraftSummaries(
     [
       {
@@ -19,13 +19,13 @@ test("offline local title wins over newly linked server placeholder", () => {
         created_at: "",
         updated_at: "2026-01-01T00:01:00.000Z",
         title: "Local title",
-        offline: true,
+        hasUnconfirmedChanges: true,
       },
     ],
   );
 
   expect(summary.title).toBe("Local title");
-  expect(summary.offline).toBe(true);
+  expect(summary.hasUnconfirmedChanges).toBe(true);
   expect(summary.source).toBe("merged");
 });
 

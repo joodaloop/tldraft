@@ -28,7 +28,7 @@ function displayTitle(
 ): string {
   const localUpdated = local?.updated_at;
   const localIsCurrent =
-    !!local?.offline ||
+    !!local?.hasUnconfirmedChanges ||
     (localUpdated !== undefined && localUpdated >= (page.updated_at ?? ""));
 
   if (localIsCurrent && local?.title !== undefined) {
@@ -72,7 +72,7 @@ export function buildDraftSummaries(
       updated_at: mergeUpdatedAt(server, local),
       relationship: server.relationship,
       title: displayTitle(server, local, cachedById.get(server.page_id)),
-      offline: local?.offline ?? server.offline ?? false,
+      hasUnconfirmedChanges: local?.hasUnconfirmedChanges ?? false,
       source: local ? "merged" : "server",
     });
   }
@@ -85,7 +85,7 @@ export function buildDraftSummaries(
       created_at: local.created_at,
       updated_at: local.updated_at,
       title: localTitle(local.title),
-      offline: local.offline ?? false,
+      hasUnconfirmedChanges: local.hasUnconfirmedChanges ?? false,
       source: "local",
     });
   }
@@ -102,6 +102,5 @@ export function serverSummaries(summaries: DraftSummary[]): ServerDraftRow[] {
       updated_at: summary.updated_at,
       title: summary.title,
       relationship: summary.relationship,
-      offline: summary.offline,
     }));
 }
