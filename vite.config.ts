@@ -37,16 +37,16 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
       },
       manifest: {
-        name: "Drafts",
-        short_name: "Drafts",
-        description: "Collaborative drafts editor",
+        name: "tldraft",
+        short_name: "tldraft",
+        description: "Collaborative docs editor",
         theme_color: "#ffffff",
         background_color: "#ffffff",
         display: "standalone",
         scope: "/",
         start_url: "/",
         orientation: "portrait",
-        id: "drafts",
+        id: "tldraft",
         icons: [
           {
             src: "pwa-192x192.png",
