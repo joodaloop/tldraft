@@ -1,12 +1,13 @@
 import { A, useNavigate } from "@solidjs/router";
 import { createMemo, createSignal, For, Show } from "solid-js";
-import { usePages, type PageEntry } from "../stores/pages";
+import { usePages } from "../stores/pages";
+import type { DraftSummary } from "../stores/draftSummaries";
 
 type SortKey = "created" | "modified" | "name";
 
 // Local-only drafts have no updated_at (and a blank created_at), so they sort to
-// the bottom under created/modified — the server supplies both for saved drafts.
-function comparePages(a: PageEntry, b: PageEntry, key: SortKey): number {
+// the bottom under created/modified until the server links them.
+function comparePages(a: DraftSummary, b: DraftSummary, key: SortKey): number {
   if (key === "name") {
     return (a.title || "Untitled").localeCompare(b.title || "Untitled");
   }
@@ -19,24 +20,24 @@ function comparePages(a: PageEntry, b: PageEntry, key: SortKey): number {
 
 /**
  * Lists the user's drafts. The resource is owned by the app root (see
- * `PagesProvider`), which diffs a local IndexedDB scan against the server list
- * to split drafts into saved vs. local-only ("unsaved"); this component just
- * renders its loading / signed-out / empty / loaded states.
+ * `PagesProvider`), which merges the server list with this device's local
+ * IndexedDB cache; this component just renders its loading / signed-out /
+ * empty / loaded states.
  */
 export default function Sidebar(props: { activeId?: string }) {
-  const { saved, unsaved, loading, signedOut } = usePages();
+  const { pages, loading, signedOut } = usePages();
   const navigate = useNavigate();
   const [sortBy, setSortBy] = createSignal<SortKey>("created");
 
-  const sortedSaved = createMemo(() => [...saved()].sort((a, b) => comparePages(a, b, sortBy())));
-  const sortedUnsaved = createMemo(() => [...unsaved()].sort((a, b) => comparePages(a, b, sortBy())));
+  const sortedPages = createMemo(() => [...pages()].sort((a, b) => comparePages(a, b, sortBy())));
 
-  const Item = (page: { page_id: string; title?: string }) => (
+  const Item = (page: DraftSummary) => (
     <li>
       <A
         classList={{
           "truncate px-2 py-1 rounded-sm block": true,
-          "bg-chosen": page.page_id === props.activeId,
+          "bg-chosen": page.page_id === props.activeId && !page.offline,
+          "bg-red-100": !!page.offline,
         }}
         href={`/draft/${encodeURIComponent(page.page_id)}`}
         aria-current={page.page_id === props.activeId ? "page" : undefined}
@@ -56,8 +57,8 @@ export default function Sidebar(props: { activeId?: string }) {
           Drafts
         </A>
         <div class="flex items-center gap-0">
-          <div class="relative px-2 cursor-pointer" aria-hidden="false">
-            <span aria-hidden="true">▾</span>
+          <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
+            <span aria-hidden="true">↓</span>
             <select
               class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               aria-label="Sort drafts"
@@ -69,16 +70,19 @@ export default function Sidebar(props: { activeId?: string }) {
               <option value="name">name</option>
             </select>
           </div>
-          <button class="px-2" type="button" onClick={() => navigate(`/draft/${crypto.randomUUID()}`)}>
+          <button
+            class="px-1.5 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
+            type="button"
+            onClick={() => navigate(`/draft/${crypto.randomUUID()}`)}
+          >
             +
           </button>
         </div>
       </header>
 
       <Show when={!loading()} fallback={<p class="sidebar-status">Loading…</p>}>
-        <Show
-          when={!signedOut()}
-          fallback={
+        <Show when={signedOut()}>
+          <Show when={!pages().length}>
             <div class="px-3 grid gap-2 text-center mt-4">
               <p class="opacity-50">Sign in to see your saved drafts.</p>
               <form method="post" action="/api/login" class="auth-form">
@@ -87,27 +91,13 @@ export default function Sidebar(props: { activeId?: string }) {
                 </button>
               </form>
             </div>
-          }
-        >
-          <Show when={saved().length || unsaved().length} fallback={<p>No drafts yet.</p>}>
-            <Show when={saved().length}>
-              <div class="grid gap-1">
-                <Show when={unsaved().length}>
-                  <p class="opacity-50 px-2">Drafts linked to your account</p>
-                </Show>
-                <ul class="min-w-0">
-                  <For each={sortedSaved()}>{Item}</For>
-                </ul>
-              </div>
-            </Show>
           </Show>
         </Show>
 
-        <Show when={unsaved().length}>
+        <Show when={pages().length} fallback={<Show when={!signedOut()}><p>No drafts yet.</p></Show>}>
           <div class="grid gap-1 min-w-0">
-            <p class="opacity-50 px-2">Stray drafts</p>
             <ul class="min-w-0">
-              <For each={sortedUnsaved()}>{Item}</For>
+              <For each={sortedPages()}>{Item}</For>
             </ul>
           </div>
         </Show>

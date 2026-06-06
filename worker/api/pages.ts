@@ -8,6 +8,7 @@ interface PageRow {
   created_at: string;
   updated_at: string;
   pinned_at: string | null;
+  relationship: string;
 }
 
 /**
@@ -24,7 +25,8 @@ export async function listPages(request: Request, env: Env): Promise<Response> {
 
   const { results } = await env.DB.prepare(
     `SELECT user_pages.page_id, pages.title, pages.body,
-            user_pages.created_at, pages.updated_at, user_pages.pinned_at
+            user_pages.created_at, pages.updated_at, user_pages.pinned_at,
+            user_pages.relationship
      FROM user_pages
      JOIN pages ON pages.id = user_pages.page_id
      WHERE user_pages.user_id = ?1

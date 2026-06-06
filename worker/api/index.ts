@@ -2,6 +2,7 @@ import type { Env } from "../index";
 import jwt from "@tsndr/cloudflare-worker-jwt";
 import { currentUserId } from "./session";
 import { listPages } from "./pages";
+import { linkUserToPage } from "./pageLinks";
 
 interface GoogleUserInfo {
   id: string;
@@ -143,11 +144,7 @@ async function addPage(request: Request, env: Env, pageId: string): Promise<Resp
   const userId = await currentUserId(request, env);
   if (!userId) return json({ error: "unauthorized" }, { status: 401 });
 
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO user_pages (user_id, page_id) VALUES (?1, ?2)",
-  )
-    .bind(userId, pageId)
-    .run();
+  await linkUserToPage(env, userId, pageId, "manual");
 
   return json({ ok: true, pageId });
 }

@@ -10,33 +10,31 @@ import {
 } from "solid-js";
 import { pageTitleFromDocJSON } from "../../shared/pageText";
 import { scanCachedDocs } from "./localDocs";
-
-export interface PageEntry {
-  page_id: string;
-  created_at: string;
-  /** Last-edit time from the server (pages.updated_at). Absent on local-only drafts. */
-  updated_at?: string;
-  /** Display name: the doc's first line, or "Untitled". Absent on raw server rows. */
-  title?: string;
-}
+import {
+  buildDraftSummaries,
+  serverSummaries,
+  type DraftSummary,
+  type LocalDraftRow,
+  type ServerDraftRow,
+} from "./draftSummaries";
 
 // --- Server list cache (localStorage) ---------------------------------------
 // We persist the last successful /api/pages response so the next load can paint
 // the saved drafts synchronously, before (and without waiting on) the network.
 const CACHE_KEY = "drafts:pages";
 
-function loadCachedList(): PageEntry[] | null {
+function loadCachedList(): ServerDraftRow[] | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw) as unknown;
-    return Array.isArray(data) ? (data as PageEntry[]) : null;
+    return Array.isArray(data) ? (data as ServerDraftRow[]) : null;
   } catch {
     return null; // no localStorage / corrupt JSON — just no warm cache
   }
 }
 
-function saveCachedList(pages: PageEntry[]): void {
+function saveCachedList(pages: ServerDraftRow[]): void {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(pages));
   } catch {
@@ -44,38 +42,35 @@ function saveCachedList(pages: PageEntry[]): void {
   }
 }
 
-async function fetchPages(): Promise<PageEntry[]> {
+async function fetchPages(): Promise<ServerDraftRow[]> {
   // Cookie carries the session JWT; the worker gates /api/pages on it.
   const res = await fetch("/api/pages", { credentials: "include" });
   if (res.status === 401) throw new Error("unauthorized");
   if (!res.ok) throw new Error(`failed to load pages (${res.status})`);
-  const data = (await res.json()) as { pages: PageEntry[] };
+  const data = (await res.json()) as { pages: ServerDraftRow[] };
   return data.pages;
 }
 
-async function scanLocalPages(): Promise<PageEntry[]> {
+async function scanLocalPages(): Promise<LocalDraftRow[]> {
   const records = await scanCachedDocs();
-  return records.map(({ room, cached }) => ({
+  return records.map(({ room, cached, visibleDoc }) => ({
     // created_at is left blank for local entries; the server list supplies the
     // real metadata for saved drafts. updatedAt is the cache's last-edit time
     // (Doc.tsx), so local-only drafts can still sort by "modified".
     page_id: room,
     created_at: "",
     updated_at: cached.updatedAt,
-    title: pageTitleFromDocJSON(cached.doc, "Untitled").slice(0, 80),
+    title: pageTitleFromDocJSON(visibleDoc, "Untitled").slice(0, 80),
+    offline: cached.offline,
   }));
 }
 
 interface PagesStore {
   /**
-   * Drafts confirmed by the server: the live /api/pages response once it
-   * resolves, otherwise the cached copy from the previous session so saved
-   * drafts paint immediately on load. Titles are filled in from the local doc
-   * cache where this device has the draft.
+   * Drafts known to this device: the server list merged with the local doc
+   * cache. Offline-created drafts remain in this list and carry `offline`.
    */
-  saved: Accessor<PageEntry[]>;
-  /** Local drafts the server doesn't know about (scanned but not in `saved`). */
-  unsaved: Accessor<PageEntry[]>;
+  pages: Accessor<DraftSummary[]>;
   /** True only when we have nothing to show yet and the fetch is still running. */
   loading: Accessor<boolean>;
   /** True when the fetch failed and there's nothing — cached or local — to show. */
@@ -86,53 +81,47 @@ interface PagesStore {
    * Register (or refresh the title of) a draft this device has locally, so the
    * sidebar reflects a newly-created or just-edited doc without a reload.
    */
-  noteLocalPage: (page_id: string, title?: string, updated_at?: string) => void;
+  noteLocalPage: (
+    page_id: string,
+    title?: string,
+    updated_at?: string,
+    offline?: boolean,
+  ) => void;
 }
 
 const PagesContext = createContext<PagesStore>();
-
-function usableTitle(title: string | undefined): string | undefined {
-  const trimmed = title?.trim();
-  return trimmed && trimmed !== "Untitled" ? trimmed : undefined;
-}
-
-function isPlaceholderServerTitle(page: PageEntry): boolean {
-  const title = page.title?.trim();
-  return !title || title === "Untitled" || title === page.page_id;
-}
-
-function displayTitle(
-  page: PageEntry,
-  localTitle: string | undefined,
-  cachedTitle: string | undefined,
-): string {
-  if (isPlaceholderServerTitle(page)) {
-    return usableTitle(localTitle) ?? usableTitle(cachedTitle) ?? page.title ?? "Untitled";
-  }
-
-  return usableTitle(localTitle) ?? page.title ?? "Untitled";
-}
 
 /**
  * Holds the user's drafts at the app root so they're resolved once on load and
  * shared across routes. The server list is seeded synchronously from a
  * localStorage cache (no flash), refreshed by a background /api/pages fetch,
- * and diffed against an IndexedDB scan of this device's drafts to split the
- * sidebar into saved vs. local-only ("unsaved") entries. `noteLocalPage` lets
- * the editor push live local drafts (and their titles) into the store.
+ * and merged with an IndexedDB scan of this device's drafts. `noteLocalPage`
+ * lets the editor push live local drafts (and their titles) into the store.
  */
 export function PagesProvider(props: ParentProps) {
   const cached = loadCachedList();
   const [server, { refetch }] = createResource(fetchPages);
-  const [local, setLocal] = createSignal<PageEntry[]>([]);
+  const [local, setLocal] = createSignal<LocalDraftRow[]>([]);
 
-  const noteLocalPage = (page_id: string, title?: string, updated_at?: string) => {
+  const noteLocalPage = (
+    page_id: string,
+    title?: string,
+    updated_at?: string,
+    offline?: boolean,
+  ) => {
     const name = (title ?? "").trim() || "Untitled";
     setLocal((prev) => {
       const i = prev.findIndex((p) => p.page_id === page_id);
-      if (i === -1) return [...prev, { page_id, created_at: "", updated_at, title: name }];
+      if (i === -1) {
+        return [...prev, { page_id, created_at: "", updated_at, title: name, offline }];
+      }
       const next = prev.slice();
-      next[i] = { ...next[i], updated_at: updated_at ?? next[i].updated_at, title: name };
+      next[i] = {
+        ...next[i],
+        updated_at: updated_at ?? next[i].updated_at,
+        title: name,
+        offline: offline ?? next[i].offline,
+      };
       return next;
     });
   };
@@ -153,30 +142,10 @@ export function PagesProvider(props: ParentProps) {
     server.state === "ready" || server.state === "refreshing";
   const serverPages = () => (serverReady() ? server() ?? [] : cached ?? []);
 
-  const localTitles = () => new Map(local().map((p) => [p.page_id, p.title]));
-  const localUpdatedTimes = () => new Map(local().map((p) => [p.page_id, p.updated_at]));
-  const cachedTitles = () => new Map((cached ?? []).map((p) => [p.page_id, p.title]));
-  const saved = () => {
-    const titles = localTitles();
-    const updatedTimes = localUpdatedTimes();
-    const cached = cachedTitles();
-    return serverPages().map((p) => {
-      const localUpdated = updatedTimes.get(p.page_id);
-      return {
-        ...p,
-        updated_at:
-          localUpdated && localUpdated > (p.updated_at ?? "")
-            ? localUpdated
-            : p.updated_at,
-        title: displayTitle(p, titles.get(p.page_id), cached.get(p.page_id)),
-      };
-    });
-  };
-  const savedIds = () => new Set(serverPages().map((p) => p.page_id));
-  const unsaved = () => local().filter((p) => !savedIds().has(p.page_id));
+  const pages = () => buildDraftSummaries(serverPages(), local(), cached ?? []);
 
   createEffect(() => {
-    if (serverReady()) saveCachedList(saved());
+    if (serverReady()) saveCachedList(serverSummaries(pages()));
   });
 
   const loading = () =>
@@ -193,7 +162,7 @@ export function PagesProvider(props: ParentProps) {
 
   return (
     <PagesContext.Provider
-      value={{ saved, unsaved, loading, signedOut, refetch, noteLocalPage }}
+      value={{ pages, loading, signedOut, refetch, noteLocalPage }}
     >
       {props.children}
     </PagesContext.Provider>

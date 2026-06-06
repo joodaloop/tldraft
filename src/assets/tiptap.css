@@ -28,10 +28,10 @@
   overflow-wrap: anywhere;
   white-space: unset;
   padding: 64px;
-  background-color: white;
+  /*background-color: white;*/
   min-height: 100dvh;
   border-radius: 12px;
-  border: solid 0.5px #ddd;
+  /*border: solid 0.5px #ddd;*/
 }
 
 .tiptap::selection {

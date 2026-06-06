@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { Step } from "prosemirror-transform";
 import type { NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
+import { schema } from "../../shared/schema";
 
 // A best-effort offline cache of each room's latest doc, keyed by room. The
 // editor restores from it on load, and the sidebar scans it to discover local
-// drafts that haven't been saved to an account yet.
+// drafts before the server list catches up.
 const DB_NAME = "drafts";
 const STORE = "docs";
 
@@ -24,11 +26,22 @@ export interface CachedDoc {
   unconfirmed: unknown[];
   /** ISO timestamp of the last genuine local doc edit. */
   updatedAt?: string;
+  /**
+   * True for a draft that was created locally while the document authority was
+   * unreachable. Cleared once it reconnects and has no unconfirmed steps left.
+   */
+  offline?: boolean;
 }
 
 export interface LocalDocRecord {
   room: string;
   cached: CachedDoc;
+  /**
+   * The visible local doc: confirmed base plus unconfirmed steps where they can
+   * be replayed. Use this for UI labels so offline edits do not disappear from
+   * the sidebar while waiting for server confirmation.
+   */
+  visibleDoc: NodeJSON;
 }
 
 const cachedDocSchema = z.object({
@@ -38,6 +51,7 @@ const cachedDocSchema = z.object({
   unconfirmed: z.array(z.unknown()),
   // Optional: entries cached before this field existed still load.
   updatedAt: z.string().optional(),
+  offline: z.boolean().optional(),
 });
 
 function openDB(): Promise<IDBDatabase> {
@@ -110,10 +124,30 @@ export async function scanCachedDocs(): Promise<LocalDocRecord[]> {
     keys.forEach((key, i) => {
       if (typeof key !== "string") return;
       const parsed = cachedDocSchema.safeParse(values[i]);
-      if (parsed.success) out.push({ room: key, cached: parsed.data });
+      if (parsed.success) {
+        out.push({
+          room: key,
+          cached: parsed.data,
+          visibleDoc: visibleDocFromCachedDoc(parsed.data),
+        });
+      }
     });
     return out;
   } catch {
     return []; // no IndexedDB / private mode - just no local drafts
+  }
+}
+
+function visibleDocFromCachedDoc(cached: CachedDoc): NodeJSON {
+  try {
+    let doc = schema.nodeFromJSON(cached.doc);
+    for (const stepJSON of cached.unconfirmed) {
+      const result = Step.fromJSON(schema, stepJSON).apply(doc);
+      if (!result.doc) return cached.doc;
+      doc = result.doc;
+    }
+    return doc.toJSON() as NodeJSON;
+  } catch {
+    return cached.doc;
   }
 }

@@ -1,4 +1,10 @@
-import { routePartykitRequest, Server, type Connection, type WSMessage } from "partyserver";
+import {
+  routePartykitRequest,
+  Server,
+  type Connection,
+  type ConnectionContext,
+  type WSMessage,
+} from "partyserver";
 import { applyCommitJSON } from "@stepwisehq/prosemirror-collab-commit/apply-commit";
 import type { CommitJSON, NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
@@ -6,6 +12,8 @@ import { schema, emptyDocJSON, SCHEMA_VERSION } from "../shared/schema";
 import { migrateDoc } from "../shared/migrations";
 import { pageTextFromDoc } from "../shared/pageText";
 import { routeApiRequest } from "./api";
+import { recordPageOpen } from "./api/pageLinks";
+import { currentUserId } from "./api/session";
 import { clientMessageSchema, type ClientMessage, type ServerMessage } from "./protocol";
 
 export interface Env {
@@ -137,7 +145,7 @@ export class DocumentServer extends Server<Env> {
     });
   }
 
-  onConnect(connection: Connection) {
+  async onConnect(connection: Connection, ctx: ConnectionContext) {
     // Hand the new client a full snapshot to seed its collab plugin with
     // `initCollabState(state, version, doc)`.
     this.#send(connection, {
@@ -146,6 +154,15 @@ export class DocumentServer extends Server<Env> {
       doc: this.#doc,
       schemaVersion: SCHEMA_VERSION,
     });
+
+    const userId = await currentUserId(ctx.request, this.env);
+    if (!userId) return;
+
+    try {
+      await recordPageOpen(this.env, userId, this.name);
+    } catch (err) {
+      console.error("[DocumentServer] failed to record page open", err);
+    }
   }
 
   onMessage(connection: Connection, raw: WSMessage) {

@@ -9,9 +9,11 @@
 }
 button {
   user-select: none;
+  font-size: 14px;
 }
 
-a {
+a,
+select {
   cursor: default;
   -webkit-user-drag: none;
 }
