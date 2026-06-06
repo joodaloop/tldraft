@@ -24,10 +24,10 @@ function DeleteConfirmation(props: {
               : "This deletes the contents of this page."}
           </p>
         </div>
-        <div class="flex justify-center gap-3">
+        <div class="flex justify-center gap-3.5">
           <button
             type="button"
-            class="px-3 py-1.5 rounded-sm border disabled:opacity-40"
+            class="px-3 py-1.5 rounded-full border disabled:opacity-40"
             disabled={props.deleting}
             onClick={props.onCancel}
           >
@@ -35,7 +35,7 @@ function DeleteConfirmation(props: {
           </button>
           <button
             type="button"
-            class="px-3 py-1.5 rounded-sm border border-red-700 text-red-700 disabled:opacity-40"
+            class="px-3 py-1.5 rounded-full border border-red-700 text-red-700 disabled:opacity-40"
             disabled={props.deleting}
             onClick={props.onConfirm}
           >
@@ -128,7 +128,7 @@ export default function Draft() {
     <main class="w-full relative">
       <section class="mx-auto w-full max-w-4xl py-24">
         <div
-          class="hidden lg:block absolute top-3 left-0 text-center w-full text-sm opacity-30 px-8"
+          class="hidden lg:block absolute top-3 left-0 text-center w-full text-sm opacity-40 px-8"
           classList={{ "text-red-800 opacity-100": topMessageIsAlert() }}
           role="status"
         >
@@ -137,7 +137,7 @@ export default function Draft() {
         <div class="absolute top-3 right-4 z-10 flex items-center gap-3 text-sm">
           <button
             type="button"
-            class="opacity-40 hover:opacity-100 disabled:opacity-30"
+            class="opacity-50 hover:opacity-100 disabled:opacity-0"
             disabled={confirmingDelete() || deleting()}
             onClick={askToDelete}
           >

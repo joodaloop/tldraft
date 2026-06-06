@@ -25,6 +25,7 @@
   color: var(--color);
   line-height: 1.5em;
   font-family: Avenir Next;
+  user-select: text;
   /*border: solid 0.5px #ddd;*/
 }
 

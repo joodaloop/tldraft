@@ -7,8 +7,12 @@
   --color-chosen: #e5e5e5;
   --color-hover: #ececec;
 }
-button {
+
+* {
   user-select: none;
+}
+
+button {
   font-size: 14px;
 }
 
