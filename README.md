@@ -5,3 +5,7 @@
   - Revocable edit
   - Permanent edit
   - Revocable read
+- Pasting from Markdown
+- Export to:
+  - Markdown
+  - HTML

@@ -17,7 +17,7 @@
   word-break: break-word;
   overflow-wrap: anywhere;
   white-space: unset;
-  padding: 16px 64px;
+  padding: 16px 24px;
   /*background-color: white;*/
   min-height: calc(100dvh - 224px);
   border-radius: 12px;
@@ -27,6 +27,12 @@
   font-family: Avenir Next;
   user-select: text;
   /*border: solid 0.5px #ddd;*/
+}
+
+@media (min-width: 768px) {
+  .tiptap.ProseMirror {
+    padding: 16px 64px;
+  }
 }
 
 .tiptap::selection {
@@ -123,7 +129,7 @@ div[data-tippy-root] {
   font-weight: 600;
   column-span: all;
   font-size: 2.5em;
-  line-height: 1.2em;
+  line-height: 1.1em;
   margin-top: calc(var(--v-space) * 0.25em);
   margin-bottom: calc(var(--v-space) * 0.15em);
   /* text-wrap: balance; */

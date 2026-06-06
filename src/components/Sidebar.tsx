@@ -1,11 +1,42 @@
 import { A, useNavigate } from "@solidjs/router";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, createSignal, For, Show, type JSX } from "solid-js";
 import { usePages } from "../stores/pages";
 import type { DraftSummary } from "../stores/draftSummaries";
 
 type SortKey = "created" | "modified" | "name";
 
 const SORT_STORAGE_KEY = "sidebar-sort";
+
+function SlidingSidebar(props: { children: JSX.Element }) {
+  const [open, setOpen] = createSignal(true);
+
+  return (
+    <div
+      class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0 transition-[width] duration-200 ease-out"
+      classList={{ "w-3xs": open(), "w-0": !open() }}
+    >
+      <div
+        class="absolute inset-y-0 left-0 w-3xs transition-transform duration-200 ease-out"
+        classList={{ "-translate-x-full": !open() }}
+      >
+        {props.children}
+      </div>
+      <button
+        type="button"
+        class="fixed group bottom-0 z-10 p-3 px-4 w-3xs text-left delay-300"
+        classList={{
+          "bg-layer border-r border-lines": open(),
+          "w-30 transition-[color]": !open(),
+        }}
+        aria-label={open() ? "Hide sidebar" : "Show sidebar"}
+        aria-expanded={open()}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <div class="opacity-60 group-hover:opacity-100">{open() ? "hide sidebar" : "show sidebar"}</div>
+      </button>
+    </div>
+  );
+}
 
 function loadSort(): SortKey {
   const stored = localStorage.getItem(SORT_STORAGE_KEY);
@@ -60,65 +91,67 @@ export default function Sidebar(props: { activeId?: string }) {
   );
 
   return (
-    <aside
-      class="w-3xs shrink-0 grow-0 bg-layer flex flex-col gap-4 h-dvh border-r border-lines py-3 px-2 text-sm select-none"
-      aria-label="Your drafts"
-    >
-      <header class="flex gap-0 justify-between items-center">
-        <A class="px-2 font-bold" href="/">
-          tldraft
-        </A>
-        <div class="flex items-center gap-0">
-          <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
-            <span aria-hidden="true">↓</span>
-            <select
-              class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              aria-label="Sort drafts"
-              value={sortBy()}
-              onChange={(e) => changeSort(e.currentTarget.value as SortKey)}
+    <SlidingSidebar>
+      <aside
+        class="bg-layer flex flex-col gap-4 h-dvh border-r border-lines py-3 px-2 text-sm select-none"
+        aria-label="Your drafts"
+      >
+        <header class="flex gap-0 justify-between items-center">
+          <A class="px-2 font-bold" href="/">
+            tldraft
+          </A>
+          <div class="flex items-center gap-0">
+            <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
+              <span aria-hidden="true">↓</span>
+              <select
+                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                aria-label="Sort drafts"
+                value={sortBy()}
+                onChange={(e) => changeSort(e.currentTarget.value as SortKey)}
+              >
+                <option value="created">created</option>
+                <option value="modified">modified</option>
+                <option value="name">name</option>
+              </select>
+            </div>
+            <button
+              class="px-1.5 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
+              type="button"
+              onClick={() => navigate(`/draft/${crypto.randomUUID()}`)}
             >
-              <option value="created">created</option>
-              <option value="modified">modified</option>
-              <option value="name">name</option>
-            </select>
+              +
+            </button>
           </div>
-          <button
-            class="px-1.5 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
-            type="button"
-            onClick={() => navigate(`/draft/${crypto.randomUUID()}`)}
+        </header>
+
+        <Show when={!loading()} fallback={<p class="sidebar-status">Loading…</p>}>
+          <Show when={signedOut()}>
+            <div class="px-2 grid gap-2 my-2">
+              <form method="post" action="/api/login" class="auth-form">
+                <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
+                  Login with Google
+                </button>
+              </form>
+              <p class="opacity-50 text-xs">Sign in to link these drafts to an account across devices.</p>
+            </div>
+          </Show>
+
+          <Show
+            when={pages().length}
+            fallback={
+              <Show when={!signedOut()}>
+                <p>No drafts yet.</p>
+              </Show>
+            }
           >
-            +
-          </button>
-        </div>
-      </header>
-
-      <Show when={!loading()} fallback={<p class="sidebar-status">Loading…</p>}>
-        <Show when={signedOut()}>
-          <div class="px-2 grid gap-2 my-2">
-            <form method="post" action="/api/login" class="auth-form">
-              <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
-                Login with Google
-              </button>
-            </form>
-            <p class="opacity-50 text-xs">Sign in to link these drafts to an account across devices.</p>
-          </div>
+            <div class="grid gap-1 min-w-0">
+              <ul class="min-w-0">
+                <For each={sortedPages()}>{Item}</For>
+              </ul>
+            </div>
+          </Show>
         </Show>
-
-        <Show
-          when={pages().length}
-          fallback={
-            <Show when={!signedOut()}>
-              <p>No drafts yet.</p>
-            </Show>
-          }
-        >
-          <div class="grid gap-1 min-w-0">
-            <ul class="min-w-0">
-              <For each={sortedPages()}>{Item}</For>
-            </ul>
-          </div>
-        </Show>
-      </Show>
-    </aside>
+      </aside>
+    </SlidingSidebar>
   );
 }

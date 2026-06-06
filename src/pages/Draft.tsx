@@ -53,12 +53,14 @@ export default function Draft() {
   const { pages, noteLocalPage, forgetLocalPage } = usePages();
   const [status, setStatus] = createSignal<DocStatus>("connecting");
   // const [showOffline, setShowOffline] = createSignal(false);
-  const [confirmingDelete, setConfirmingDelete] = createSignal(false);
-  const [deleting, setDeleting] = createSignal(false);
+  const [confirmingDeleteId, setConfirmingDeleteId] = createSignal<string | null>(null);
+  const [deletingId, setDeletingId] = createSignal<string | null>(null);
   const [temporaryTopMessage, setTemporaryTopMessage] = createSignal<string | null>(null);
   let topMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
   const activePage = createMemo(() => pages().find((page) => page.page_id === params.id));
+  const confirmingDelete = () => confirmingDeleteId() === params.id;
+  const deleting = () => deletingId() === params.id;
   const hasOfflineChanges = () =>
     (status() === "offline" || status() === "halted") && (activePage()?.hasUnconfirmedChanges ?? false);
   const defaultTopMessage = () => (hasOfflineChanges() ? "This page has unsaved changes." : DEFAULT_TOP_MESSAGE);
@@ -83,14 +85,15 @@ export default function Draft() {
     if (topMessageTimer) clearTimeout(topMessageTimer);
     topMessageTimer = undefined;
     setTemporaryTopMessage(null);
-    setConfirmingDelete(true);
+    setConfirmingDeleteId(params.id);
   };
 
   const deleteDraft = async () => {
     const id = params.id;
     if (!id || deleting()) return;
+    const errorMessage = actionError();
 
-    setDeleting(true);
+    setDeletingId(id);
 
     try {
       const res = await apiFetch(`/api/page/delete/${encodeURIComponent(id)}`, {
@@ -101,22 +104,22 @@ export default function Draft() {
       if (!res.ok) {
         if (res.status === 401) {
           await forgetLocalPage(id);
-          navigate("/", { replace: true });
+          if (params.id === id) navigate("/", { replace: true });
           return;
         }
 
-        setDeleting(false);
-        setConfirmingDelete(false);
-        showTemporaryMessage(actionError());
+        if (deletingId() === id) setDeletingId(null);
+        if (confirmingDeleteId() === id) setConfirmingDeleteId(null);
+        if (params.id === id) showTemporaryMessage(errorMessage);
         return;
       }
 
       await forgetLocalPage(id);
-      navigate("/", { replace: true });
+      if (params.id === id) navigate("/", { replace: true });
     } catch {
-      setDeleting(false);
-      setConfirmingDelete(false);
-      showTemporaryMessage(actionError());
+      if (deletingId() === id) setDeletingId(null);
+      if (confirmingDeleteId() === id) setConfirmingDeleteId(null);
+      if (params.id === id) showTemporaryMessage(errorMessage);
     }
   };
 
@@ -149,7 +152,7 @@ export default function Draft() {
             deleting={deleting()}
             forgetsOnly={forgetsOnly()}
             progressLabel={actionProgressLabel()}
-            onCancel={() => setConfirmingDelete(false)}
+            onCancel={() => setConfirmingDeleteId(null)}
             onConfirm={() => void deleteDraft()}
           />
         </Show>
