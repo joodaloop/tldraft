@@ -16,7 +16,7 @@ function loadSort(): SortKey {
 // the bottom under created/modified until the server links them.
 function comparePages(a: DraftSummary, b: DraftSummary, key: SortKey): number {
   if (key === "name") {
-    return (a.title || "Untitled").localeCompare(b.title || "Untitled");
+    return a.title.localeCompare(b.title);
   }
   if (key === "modified") {
     return (b.updated_at || "").localeCompare(a.updated_at || "");
@@ -54,7 +54,7 @@ export default function Sidebar(props: { activeId?: string }) {
         href={`/draft/${encodeURIComponent(page.page_id)}`}
         aria-current={page.page_id === props.activeId ? "page" : undefined}
       >
-        {page.title || "Untitled"}
+        {page.title}
       </A>
     </li>
   );
@@ -94,16 +94,14 @@ export default function Sidebar(props: { activeId?: string }) {
 
       <Show when={!loading()} fallback={<p class="sidebar-status">Loading…</p>}>
         <Show when={signedOut()}>
-          <Show when={!pages().length}>
-            <div class="px-3 grid gap-2 text-center mt-4">
-              <p class="opacity-50">Sign in to see your saved drafts.</p>
-              <form method="post" action="/api/login" class="auth-form">
-                <button class="w-full bg-white py-1.5 rounded-sm text-sm" type="submit">
-                  Continue with Google
-                </button>
-              </form>
-            </div>
-          </Show>
+          <div class="px-2 grid gap-2 my-2">
+            <form method="post" action="/api/login" class="auth-form">
+              <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
+                Login with Google
+              </button>
+            </form>
+            <p class="opacity-50 text-xs">Sign in to link these drafts to an account across devices.</p>
+          </div>
         </Show>
 
         <Show
