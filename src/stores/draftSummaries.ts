@@ -39,7 +39,6 @@ function displayTitle(
     return (
       usableTitle(local?.title) ??
       usableTitle(cached?.title) ??
-      page.title ??
       "Untitled"
     );
   }

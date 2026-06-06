@@ -372,22 +372,6 @@ mark {
   margin-top: 0px;
 }
 
-.tiptap .align-left {
-  text-align: left;
-}
-
-.tiptap .align-center {
-  text-align: center;
-}
-
-.tiptap .align-right {
-  text-align: right;
-}
-
-.tiptap .align-justify {
-  text-align: justify;
-}
-
 .tiptap .split {
   display: flex;
   flex-direction: column;

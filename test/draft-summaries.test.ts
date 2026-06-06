@@ -52,3 +52,20 @@ test("fresh local Untitled is a real title, not a fallback miss", () => {
 
   expect(summary.title).toBe("Untitled");
 });
+
+test("server page ids are placeholders, not display titles", () => {
+  const [summary] = buildDraftSummaries(
+    [
+      {
+        page_id: "draft-1",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+        title: "draft-1",
+        relationship: "creator",
+      },
+    ],
+    [],
+  );
+
+  expect(summary.title).toBe("Untitled");
+});

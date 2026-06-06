@@ -349,7 +349,7 @@ export class DocumentServer extends Server<Env> {
 
   #pageText(): [title: string, body: string] {
     const doc = schema.nodeFromJSON(this.#doc);
-    return pageTextFromDoc(doc, this.name);
+    return pageTextFromDoc(doc, "Untitled");
   }
 }
 

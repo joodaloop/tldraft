@@ -20,7 +20,7 @@ export default function Draft() {
       return;
     }
 
-    const timer = setTimeout(() => setShowOffline(true), 800);
+    const timer = setTimeout(() => setShowOffline(true), 5000);
     onCleanup(() => clearTimeout(timer));
   });
 

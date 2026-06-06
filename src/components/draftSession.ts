@@ -319,6 +319,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     editor.setEditable(!halted);
     setReady(true);
     reportTitle(true);
+    persist();
   };
 
   const connect = () => {
@@ -364,6 +365,9 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
           editor.setEditable(!halted);
           setReady(true);
           reportTitle(true);
+          persist();
+        } else {
+          seedEmpty();
         }
       } catch (err) {
         console.warn(`[Doc:${options.room}] ignoring bad cache entry`, err);
