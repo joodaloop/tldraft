@@ -175,6 +175,42 @@ async function setPinned(
   return json({ ok: true, pageId, pinned });
 }
 
+async function deletePage(request: Request, env: Env, pageId: string): Promise<Response> {
+  const userId = await currentUserId(request, env);
+  if (!userId) return json({ error: "unauthorized" }, { status: 401 });
+
+  const page = await env.DB.prepare(
+    `SELECT pages.created_by, user_pages.relationship
+     FROM pages
+     LEFT JOIN user_pages ON user_pages.page_id = pages.id AND user_pages.user_id = ?1
+     WHERE pages.id = ?2`,
+  )
+    .bind(userId, pageId)
+    .first<{ created_by: string | null; relationship: string | null }>();
+
+  if (!page || !page.relationship) return json({ error: "not found" }, { status: 404 });
+  if (page.created_by !== userId && page.relationship !== "creator") {
+    await env.DB.prepare("DELETE FROM user_pages WHERE user_id = ?1 AND page_id = ?2").bind(userId, pageId).run();
+    return json({ ok: true, pageId, forgotten: true });
+  }
+
+  const id = env.DocumentServer.idFromName(pageId);
+  const stub = env.DocumentServer.get(id);
+  const response = await stub.fetch(
+    new Request("https://document-server/__internal/delete", {
+      method: "DELETE",
+      headers: { "x-drafts-internal-secret": env.JWT_SECRET },
+    }),
+  );
+  if (!response.ok) {
+    return json({ error: "failed to delete durable page" }, { status: 502 });
+  }
+
+  await env.DB.prepare("DELETE FROM pages WHERE id = ?1").bind(pageId).run();
+
+  return json({ ok: true, pageId, deleted: true });
+}
+
 export function routeApiRequest(request: Request, env: Env): Response | Promise<Response> | null {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/")) return null;
@@ -206,6 +242,11 @@ export function routeApiRequest(request: Request, env: Env): Response | Promise<
   const pinMatch = url.pathname.match(/^\/api\/pin\/([^/]+)\/?$/);
   if (pinMatch && (request.method === "POST" || request.method === "DELETE")) {
     return setPinned(request, env, decodeURIComponent(pinMatch[1]), request.method === "POST");
+  }
+
+  const deleteMatch = url.pathname.match(/^\/api\/page\/delete\/([^/]+)\/?$/);
+  if (deleteMatch && request.method === "DELETE") {
+    return deletePage(request, env, decodeURIComponent(deleteMatch[1]));
   }
 
   return json({ error: "not found" }, { status: 404 });

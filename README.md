@@ -1,5 +1,4 @@
 ## todo
-- Draft deletion, free up the ids
 - Presence indicators
 - Time-spent in doc tracking
 - Shareable URLs:

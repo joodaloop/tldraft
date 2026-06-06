@@ -35,5 +35,5 @@ export async function listPages(request: Request, env: Env): Promise<Response> {
     .bind(userId)
     .all<PageRow>();
 
-  return Response.json({ pages: results });
+  return Response.json({ userId, pages: results });
 }

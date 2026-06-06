@@ -9,7 +9,8 @@ import {
   type ParentProps,
 } from "solid-js";
 import { pageTitleFromDocJSON } from "../../shared/pageText";
-import { scanCachedDocs } from "./localDocs";
+import { apiFetch, currentUserId, rememberUserId } from "./auth";
+import { deleteCachedDoc, scanCachedDocs } from "./localDocs";
 import {
   buildDraftSummaries,
   serverSummaries,
@@ -46,12 +47,14 @@ function saveCachedList(pages: ServerDraftRow[]): void {
 
 async function fetchPages(): Promise<ServerDraftRow[]> {
   // Cookie carries the session JWT; the worker gates /api/pages on it.
-  const res = await fetch("/api/pages", { credentials: "include" });
+  const res = await apiFetch("/api/pages", { credentials: "include" });
   if (res.status === 401) throw new Error("unauthorized");
   if (!res.ok) throw new Error(`failed to load pages (${res.status})`);
-  const data = (await res.json()) as { pages?: unknown };
+  const data = (await res.json()) as { pages?: unknown; userId?: unknown };
+  if (typeof data.userId !== "string") throw new Error("invalid pages response");
   const parsed = serverDraftRowsSchema.safeParse(data.pages);
   if (!parsed.success) throw new Error("invalid pages response");
+  rememberUserId(data.userId);
   return parsed.data;
 }
 
@@ -80,6 +83,8 @@ interface PagesStore {
   loading: Accessor<boolean>;
   /** True when the fetch failed and there's nothing — cached or local — to show. */
   signedOut: Accessor<boolean>;
+  /** The authenticated user id from the last successful session-backed API call. */
+  currentUserId: Accessor<string | null>;
   /** Re-run the /api/pages fetch, e.g. after saving a new page. */
   refetch: () => void;
   /**
@@ -92,6 +97,8 @@ interface PagesStore {
     updated_at?: string,
     hasUnconfirmedChanges?: boolean,
   ) => void;
+  /** Remove a draft from this device's local cache and in-memory draft list. */
+  forgetLocalPage: (page_id: string) => Promise<void>;
 }
 
 const PagesContext = createContext<PagesStore>();
@@ -104,8 +111,8 @@ const PagesContext = createContext<PagesStore>();
  * lets the editor push live local drafts (and their titles) into the store.
  */
 export function PagesProvider(props: ParentProps) {
-  const cached = loadCachedList();
-  const [server, { refetch }] = createResource(fetchPages);
+  const [cached, setCached] = createSignal<ServerDraftRow[] | null>(loadCachedList());
+  const [server, { refetch, mutate }] = createResource(fetchPages);
   const [local, setLocal] = createSignal<LocalDraftRow[]>([]);
 
   const noteLocalPage = (
@@ -135,6 +142,17 @@ export function PagesProvider(props: ParentProps) {
     });
   };
 
+  const forgetLocalPage = async (page_id: string) => {
+    await deleteCachedDoc(page_id);
+    setLocal((prev) => prev.filter((p) => p.page_id !== page_id));
+    const nextServerPages = (serverReady() ? server() ?? [] : cached() ?? []).filter(
+      (p) => p.page_id !== page_id,
+    );
+    mutate(nextServerPages);
+    setCached(nextServerPages);
+    saveCachedList(nextServerPages);
+  };
+
   // Seed from the IndexedDB scan once, letting any live entries noted in the
   // meantime (e.g. a doc that mounted before the scan resolved) win.
   onMount(() => {
@@ -149,16 +167,16 @@ export function PagesProvider(props: ParentProps) {
 
   const serverReady = () =>
     server.state === "ready" || server.state === "refreshing";
-  const serverPages = () => (serverReady() ? server() ?? [] : cached ?? []);
+  const serverPages = () => (serverReady() ? server() ?? [] : cached() ?? []);
 
-  const pages = () => buildDraftSummaries(serverPages(), local(), cached ?? []);
+  const pages = () => buildDraftSummaries(serverPages(), local(), cached() ?? []);
 
   createEffect(() => {
     if (serverReady()) saveCachedList(serverSummaries(pages()));
   });
 
   const loading = () =>
-    cached === null &&
+    cached() === null &&
     (server.state === "pending" || server.state === "unresolved") &&
     local().length === 0;
   // Signed out reflects the auth state of the /api/pages fetch (a 401), not
@@ -166,12 +184,21 @@ export function PagesProvider(props: ParentProps) {
   // Error("unauthorized") specifically on a 401 so we can tell auth failures
   // apart from transient network/server errors.
   const signedOut = () =>
-    server.state === "errored" &&
-    (server.error as Error | undefined)?.message === "unauthorized";
+    currentUserId() === null ||
+    (server.state === "errored" &&
+      (server.error as Error | undefined)?.message === "unauthorized");
 
   return (
     <PagesContext.Provider
-      value={{ pages, loading, signedOut, refetch, noteLocalPage }}
+      value={{
+        pages,
+        loading,
+        signedOut,
+        currentUserId,
+        refetch,
+        noteLocalPage,
+        forgetLocalPage,
+      }}
     >
       {props.children}
     </PagesContext.Provider>

@@ -165,6 +165,19 @@ export class DocumentServer extends Server<Env> {
     }
   }
 
+  async onRequest(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method !== "DELETE" || url.pathname !== "/__internal/delete") {
+      return new Response("Not found", { status: 404 });
+    }
+    if (request.headers.get("x-drafts-internal-secret") !== this.env.JWT_SECRET) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    await this.#deletePage();
+    return Response.json({ ok: true });
+  }
+
   onMessage(connection: Connection, raw: WSMessage) {
     let msg: ClientMessage;
     try {
@@ -345,6 +358,19 @@ export class DocumentServer extends Server<Env> {
     )
       .bind(this.name, title, body)
       .run();
+  }
+
+  async #deletePage() {
+    await this.#tail;
+    await this.ctx.storage.deleteAll();
+    this.#version = 0;
+    this.#doc = emptyDocJSON();
+    this.#log = [];
+
+    for (const connection of this.getConnections()) {
+      this.#send(connection, { type: "error", message: "page deleted" });
+      connection.close(1001, "page deleted");
+    }
   }
 
   #pageText(): [title: string, body: string] {
