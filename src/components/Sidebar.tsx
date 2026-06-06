@@ -18,10 +18,10 @@ function SlidingSidebar(props: { children: (open: Accessor<boolean>) => JSX.Elem
       {props.children(open)}
       <button
         type="button"
-        class="fixed group bottom-0 -left-px z-10 p-3 px-4 w-3xs text-left"
+        class="fixed group -bottom-px w-30 -left-px z-10 p-3 px-4 text-left"
         classList={{
           "": open(),
-          "w-32 rounded-tr-md": !open(),
+          "bg-layer md:bg-transparent rounded-tr-lg": !open(),
         }}
         aria-label={open() ? "Hide sidebar" : "Show sidebar"}
         aria-expanded={open()}
