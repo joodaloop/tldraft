@@ -10,12 +10,8 @@ import {
 } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 import { Step } from "prosemirror-transform";
 import { PartySocket } from "partysocket";
-import { z } from "zod";
 
-import type {
-  CommitJSON,
-  NodeJSON,
-} from "@stepwisehq/prosemirror-collab-commit/collab-commit";
+import type { CommitJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
 import { allExtensions } from "../../extensions";
 import { Collab } from "./collabExtension";
@@ -26,95 +22,14 @@ import {
   type ClientMessage,
   type ServerMessage,
 } from "../../worker/protocol";
+import {
+  deleteCachedDoc,
+  loadCachedDoc,
+  saveCachedDoc,
+  type CachedDoc,
+} from "../stores/localDocs";
 
 import "prosemirror-view/style/prosemirror.css";
-
-// --- Local cache (IndexedDB) -------------------------------------------------
-// A best-effort offline cache of each room's latest doc, keyed by room. We
-// restore from it on load so content paints before the server responds, and we
-// keep the collab version alongside the doc so the catch-up sync after connect
-// only has to replay the commits we actually missed.
-const DB_NAME = "drafts";
-const STORE = "docs";
-
-interface CachedDoc {
-  /**
-   * The schema version `doc` was authored under. A cache entry from a different
-   * schema is ignored on load: the optimistic restore seeds the doc directly
-   * (before the socket connects), so an old-schema doc would otherwise be fed
-   * into the current schema and corrupt or throw.
-   */
-  schemaVersion: number;
-  /** The confirmed (server-acknowledged) doc, at `version`. */
-  doc: NodeJSON;
-  /** The collab version (the strictly increasing counter) `doc` is at. */
-  version: number;
-  /**
-   * Local steps the server hasn't confirmed yet, as step JSON, in order.
-   * Re-applied on restore so in-flight edits survive a reload and still get
-   * sent once we reconnect.
-   */
-  unconfirmed: unknown[];
-}
-
-const cachedDocSchema = z.object({
-  schemaVersion: z.number().int().finite(),
-  doc: z.object({}).catchall(z.unknown()),
-  version: z.number().int().finite(),
-  unconfirmed: z.array(z.unknown()),
-});
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function loadCachedDoc(room: string): Promise<CachedDoc | null> {
-  try {
-    const db = await openDB();
-    const cached = await new Promise<unknown>((resolve, reject) => {
-      const req = db.transaction(STORE, "readonly").objectStore(STORE).get(room);
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    const parsed = cachedDocSchema.safeParse(cached);
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null; // no IndexedDB / private mode — just skip the cache
-  }
-}
-
-async function saveCachedDoc(room: string, value: CachedDoc): Promise<void> {
-  try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(value, room);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch {
-    // best-effort; a failed write just means a colder reload next time
-  }
-}
-
-async function deleteCachedDoc(room: string): Promise<void> {
-  try {
-    const db = await openDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).delete(room);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-    });
-  } catch {
-    // best-effort
-  }
-}
 
 /** Connection lifecycle, surfaced for an optional status indicator. */
 export type DocStatus =
@@ -140,13 +55,12 @@ export interface DocProps {
    * "Untitled") on seed and whenever it changes — lets the sidebar list this
    * draft live, before it's ever saved.
    */
-  onTitle?: (title: string) => void;
+  onTitle?: (title: string, updatedAt?: string) => void;
 }
 
 // The @cloudflare/vite-plugin runs the Worker + Durable Object inside the Vite
 // dev server, so in dev the worker lives on the Vite origin too — same as prod.
 const defaultHost = () => window.location.host;
-
 
 export default function Doc(props: DocProps): JSX.Element {
   const [status, setStatus] = createSignal<DocStatus>("connecting");
@@ -167,6 +81,23 @@ export default function Doc(props: DocProps): JSX.Element {
     // Set when we hit an unrecoverable condition (e.g. schema mismatch); we
     // stop sending rather than risk corrupting the document.
     let halted = false;
+    // Last local-edit time, persisted as the cache's updatedAt. Seeded from the
+    // restored cache (else now) and advanced only by genuine local edits — the
+    // `applyingCollab` guard keeps seed/restore/remote-apply dispatches from
+    // bumping it.
+    let lastModified = new Date().toISOString();
+    let applyingCollab = false;
+
+    // Dispatch a collab-authority transaction (seed/restore/remote-apply)
+    // without it counting as a local edit for `lastModified`.
+    const dispatchCollab = (tr: Parameters<typeof editor.view.dispatch>[0]) => {
+      applyingCollab = true;
+      try {
+        editor.view.dispatch(tr);
+      } finally {
+        applyingCollab = false;
+      }
+    };
 
     const setDocStatus = (s: DocStatus) => {
       setStatus(s);
@@ -200,6 +131,7 @@ export default function Doc(props: DocProps): JSX.Element {
         doc: doc.toJSON(),
         version: getVersion(editor.state) ?? 0,
         unconfirmed: unconfirmed.map((u) => u.step.toJSON()),
+        updatedAt: lastModified,
       };
     };
 
@@ -225,17 +157,17 @@ export default function Doc(props: DocProps): JSX.Element {
       saveTimer = setTimeout(persist, 3000);
     };
 
-    // Report the doc's title (first non-empty line, else "Untitled")
-    // to the parent, but only when it actually changes — this fires on every
-    // doc-changed transaction, so we don't want to churn the store per keystroke.
+    // Report the doc's title (first non-empty line, else "Untitled") to the
+    // parent. Local edits force a report so the sidebar's modified sort updates
+    // even when the title itself is unchanged.
     let lastTitle: string | undefined;
-    const reportTitle = () => {
+    const reportTitle = (force = false) => {
       if (!props.onTitle) return;
       const [title] = pageTextFromDoc(editor.state.doc, "Untitled");
       const next = title.slice(0, 80);
-      if (next !== lastTitle) {
+      if (force || next !== lastTitle) {
         lastTitle = next;
-        props.onTitle(next);
+        props.onTitle(next, lastModified);
       }
     };
 
@@ -276,7 +208,7 @@ export default function Doc(props: DocProps): JSX.Element {
         // First snapshot: seed the collab plugin with the server's doc+version.
         // Set `initialized` before updateState so `editable` is re-read as true.
         initialized = true;
-        editor.view.dispatch(
+        dispatchCollab(
           initCollabState(editor.state, msg.version, msg.doc),
         );
         editor.setEditable(!halted);
@@ -298,7 +230,7 @@ export default function Doc(props: DocProps): JSX.Element {
             `[Doc:${props.room}] server could not replay history from v${current}; resetting to snapshot v${msg.version}`,
           );
           resyncTarget = null;
-          editor.view.dispatch(
+          dispatchCollab(
             initCollabState(editor.state, msg.version, msg.doc),
           );
           editor.setEditable(!halted);
@@ -322,7 +254,7 @@ export default function Doc(props: DocProps): JSX.Element {
           `[Doc:${props.room}] local state (v${current}) is ahead of server (v${msg.version}); resetting to server snapshot`,
         );
         resyncTarget = null;
-        editor.view.dispatch(
+        dispatchCollab(
           initCollabState(editor.state, msg.version, msg.doc),
         );
         editor.setEditable(!halted);
@@ -337,7 +269,7 @@ export default function Doc(props: DocProps): JSX.Element {
 
     const handleCommit = (commitJSON: CommitJSON) => {
       const commit = Commit.FromJSON(editor.state.schema, commitJSON);
-      editor.view.dispatch(receiveCommitTransaction(editor.state, commit));
+      dispatchCollab(receiveCommitTransaction(editor.state, commit));
 
       // Our own commit came back — clear the gate so we can send the next one.
       if (inflightRef !== null && commit.ref === inflightRef) inflightRef = null;
@@ -404,8 +336,10 @@ export default function Doc(props: DocProps): JSX.Element {
     // for the collab transactions we dispatch below alike.
     editor.on("transaction", ({ transaction }) => {
       if (transaction.docChanged) {
+        const localEdit = !applyingCollab;
+        if (localEdit) lastModified = new Date().toISOString();
         schedulePersist();
-        reportTitle();
+        reportTitle(localEdit);
       }
       trySend();
     });
@@ -440,7 +374,7 @@ export default function Doc(props: DocProps): JSX.Element {
     // true or the editor stays contenteditable=false until the next update.
     const seedEmpty = () => {
       initialized = true;
-      editor.view.dispatch(initCollabState(editor.state, 0, emptyDocJSON()));
+      dispatchCollab(initCollabState(editor.state, 0, emptyDocJSON()));
       editor.setEditable(!halted);
     };
 
@@ -457,8 +391,11 @@ export default function Doc(props: DocProps): JSX.Element {
           }
           if (cached) {
             initialized = true;
+            // Restore the prior session's last-edit time so we don't reset
+            // "modified" to now just by reopening the draft.
+            if (cached.updatedAt) lastModified = cached.updatedAt;
             // Seed the confirmed authority state from the cached base...
-            editor.view.dispatch(
+            dispatchCollab(
               initCollabState(editor.state, cached.version, cached.doc),
             );
             // ...then replay the unconfirmed steps as local edits, so the
@@ -469,7 +406,7 @@ export default function Doc(props: DocProps): JSX.Element {
               for (const stepJSON of cached.unconfirmed) {
                 tr.step(Step.fromJSON(editor.state.schema, stepJSON));
               }
-              if (tr.docChanged) editor.view.dispatch(tr);
+              if (tr.docChanged) dispatchCollab(tr);
             }
             editor.setEditable(!halted);
           } else {

@@ -3,11 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0" />
     <title>drafts</title>
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Best-effort zoom suppression. Note: the browser's own chrome (menu zoom,
+      // some OS-level zoom) cannot be intercepted from JS — this only covers the
+      // pinch / keyboard / gesture paths.
+      (() => {
+        // Trackpad pinch and ctrl/cmd+wheel both arrive as a wheel event with ctrlKey.
+        window.addEventListener(
+          "wheel",
+          (e) => {
+            if (e.ctrlKey || e.metaKey) e.preventDefault();
+          },
+          { passive: false },
+        );
+
+        // Cmd/Ctrl +  -  =  0
+        window.addEventListener("keydown", (e) => {
+          if ((e.ctrlKey || e.metaKey) && ["+", "-", "=", "0"].includes(e.key)) {
+            e.preventDefault();
+          }
+        });
+
+        // Safari pinch gestures.
+        for (const type of ["gesturestart", "gesturechange", "gestureend"]) {
+          document.addEventListener(type, (e) => e.preventDefault());
+        }
+      })();
+    </script>
     <script type="module" src="/src/index.tsx"></script>
   </body>
 </html>

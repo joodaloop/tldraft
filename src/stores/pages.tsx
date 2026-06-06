@@ -8,12 +8,14 @@ import {
   type Accessor,
   type ParentProps,
 } from "solid-js";
-import type { NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 import { pageTitleFromDocJSON } from "../../shared/pageText";
+import { scanCachedDocs } from "./localDocs";
 
 export interface PageEntry {
   page_id: string;
   created_at: string;
+  /** Last-edit time from the server (pages.updated_at). Absent on local-only drafts. */
+  updated_at?: string;
   /** Display name: the doc's first line, or "Untitled". Absent on raw server rows. */
   title?: string;
 }
@@ -51,54 +53,17 @@ async function fetchPages(): Promise<PageEntry[]> {
   return data.pages;
 }
 
-// --- Local scan (IndexedDB) -------------------------------------------------
-// Doc.tsx caches each room's latest doc in the `drafts` DB under the `docs`
-// store, keyed by room (which is the page_id). We scan those records to discover
-// every draft this device has touched — with a title pulled from the cached doc
-// — then diff them against the server list to tell saved drafts apart from
-// local-only ones the server hasn't seen.
-const DB_NAME = "drafts";
-const STORE = "docs";
-
-function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    // Same name/version/store as Doc.tsx; whichever opens first creates it.
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
 async function scanLocalPages(): Promise<PageEntry[]> {
-  try {
-    const db = await openDB();
-    const [keys, values] = await new Promise<[IDBValidKey[], unknown[]]>(
-      (resolve, reject) => {
-        const store = db.transaction(STORE, "readonly").objectStore(STORE);
-        const keysReq = store.getAllKeys();
-        const valsReq = store.getAll();
-        const tx = store.transaction;
-        tx.oncomplete = () => resolve([keysReq.result, valsReq.result]);
-        tx.onerror = () => reject(tx.error);
-      },
-    );
-    const out: PageEntry[] = [];
-    keys.forEach((key, i) => {
-      if (typeof key !== "string") return;
-      const doc = (values[i] as { doc?: NodeJSON } | undefined)?.doc;
-      // created_at is left blank for local entries; the server list supplies the
-      // real metadata for saved drafts.
-      out.push({
-        page_id: key,
-        created_at: "",
-        title: doc ? pageTitleFromDocJSON(doc, "Untitled").slice(0, 80) : "Untitled",
-      });
-    });
-    return out;
-  } catch {
-    return []; // no IndexedDB / private mode — just no local drafts
-  }
+  const records = await scanCachedDocs();
+  return records.map(({ room, cached }) => ({
+    // created_at is left blank for local entries; the server list supplies the
+    // real metadata for saved drafts. updatedAt is the cache's last-edit time
+    // (Doc.tsx), so local-only drafts can still sort by "modified".
+    page_id: room,
+    created_at: "",
+    updated_at: cached.updatedAt,
+    title: pageTitleFromDocJSON(cached.doc, "Untitled").slice(0, 80),
+  }));
 }
 
 interface PagesStore {
@@ -121,7 +86,7 @@ interface PagesStore {
    * Register (or refresh the title of) a draft this device has locally, so the
    * sidebar reflects a newly-created or just-edited doc without a reload.
    */
-  noteLocalPage: (page_id: string, title?: string) => void;
+  noteLocalPage: (page_id: string, title?: string, updated_at?: string) => void;
 }
 
 const PagesContext = createContext<PagesStore>();
@@ -161,13 +126,13 @@ export function PagesProvider(props: ParentProps) {
   const [server, { refetch }] = createResource(fetchPages);
   const [local, setLocal] = createSignal<PageEntry[]>([]);
 
-  const noteLocalPage = (page_id: string, title?: string) => {
+  const noteLocalPage = (page_id: string, title?: string, updated_at?: string) => {
     const name = (title ?? "").trim() || "Untitled";
     setLocal((prev) => {
       const i = prev.findIndex((p) => p.page_id === page_id);
-      if (i === -1) return [...prev, { page_id, created_at: "", title: name }];
+      if (i === -1) return [...prev, { page_id, created_at: "", updated_at, title: name }];
       const next = prev.slice();
-      next[i] = { ...next[i], title: name };
+      next[i] = { ...next[i], updated_at: updated_at ?? next[i].updated_at, title: name };
       return next;
     });
   };
@@ -189,14 +154,23 @@ export function PagesProvider(props: ParentProps) {
   const serverPages = () => (serverReady() ? server() ?? [] : cached ?? []);
 
   const localTitles = () => new Map(local().map((p) => [p.page_id, p.title]));
+  const localUpdatedTimes = () => new Map(local().map((p) => [p.page_id, p.updated_at]));
   const cachedTitles = () => new Map((cached ?? []).map((p) => [p.page_id, p.title]));
   const saved = () => {
     const titles = localTitles();
+    const updatedTimes = localUpdatedTimes();
     const cached = cachedTitles();
-    return serverPages().map((p) => ({
-      ...p,
-      title: displayTitle(p, titles.get(p.page_id), cached.get(p.page_id)),
-    }));
+    return serverPages().map((p) => {
+      const localUpdated = updatedTimes.get(p.page_id);
+      return {
+        ...p,
+        updated_at:
+          localUpdated && localUpdated > (p.updated_at ?? "")
+            ? localUpdated
+            : p.updated_at,
+        title: displayTitle(p, titles.get(p.page_id), cached.get(p.page_id)),
+      };
+    });
   };
   const savedIds = () => new Set(serverPages().map((p) => p.page_id));
   const unsaved = () => local().filter((p) => !savedIds().has(p.page_id));

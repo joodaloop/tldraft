@@ -45,7 +45,7 @@ export default function Draft() {
 
       <section class="mx-auto w-full max-w-4xl my-16 px-6">
         <Show when={params.id} keyed>
-          {(id) => <Doc room={id} onTitle={(title) => noteLocalPage(id, title)} />}
+          {(id) => <Doc room={id} onTitle={(title, updatedAt) => noteLocalPage(id, title, updatedAt)} />}
         </Show>
       </section>
     </main>

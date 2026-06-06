@@ -27,6 +27,7 @@
       "binding": "DB",
       "database_name": "drafts",
       "database_id": "c03fb629-a2f4-4115-8caf-cb1ff54a9142",
+      "migrations_dir": "migrations",
     },
   ],
   "migrations": [
