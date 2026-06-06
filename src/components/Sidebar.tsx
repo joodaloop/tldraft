@@ -89,11 +89,11 @@ export default function Sidebar(props: { activeId?: string }) {
     <SlidingSidebar>
       {(open) => (
         <aside
-          class="absolute inset-y-0 left-0 w-3xs bg-layer flex flex-col gap-4 h-dvh border-r border-lines pt-3 pb-32 px-2 text-sm select-none transition-transform duration-200 ease-out"
+          class="absolute inset-y-0 left-0 w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none transition-transform duration-200 ease-out"
           classList={{ "-translate-x-full": !open() }}
           aria-label="Your drafts"
         >
-          <header class="flex gap-0 justify-between items-center">
+          <header class="flex gap-0 justify-between items-center py-3 mx-2 border-b border-lines">
             <A class="px-2 font-bold" href="/">
               tldraft
             </A>
@@ -121,33 +121,29 @@ export default function Sidebar(props: { activeId?: string }) {
             </div>
           </header>
 
-          <Show when={!loading()} fallback={<p class="sidebar-status">Loading…</p>}>
-            <Show when={signedOut()}>
-              <div class="px-2 grid gap-2 my-2">
-                <form method="post" action="/api/login" class="auth-form">
-                  <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
-                    Login with Google
-                  </button>
-                </form>
-                <p class="opacity-50 text-xs">Sign in to link these drafts to an account across devices.</p>
-              </div>
-            </Show>
+          <div class="min-h-0 flex-1 overflow-y-auto">
+            <Show when={!loading()} fallback={<p class="py-3 px-4 opacity-50">Loading drafts…</p>}>
+              <Show when={signedOut()}>
+                <div class="grid gap-2 mx-2 border-b border-lines px-2 py-5">
+                  <form method="post" action="/api/login">
+                    <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
+                      Login with Google
+                    </button>
+                  </form>
+                  <p class="opacity-50 text-xs">Sign in to link these drafts to an account across devices.</p>
+                </div>
+              </Show>
 
-            <Show
-              when={pages().length}
-              fallback={
-                <Show when={!signedOut()}>
-                  <p>No drafts yet.</p>
-                </Show>
-              }
-            >
-              <div class="grid gap-1 min-w-0">
-                <ul class="min-w-0">
-                  <For each={sortedPages()}>{Item}</For>
-                </ul>
-              </div>
+              <Show when={pages().length}>
+                <div class="grid gap-1 min-w-0 px-2 pt-3">
+                  <ul class="min-w-0">
+                    <For each={sortedPages()}>{Item}</For>
+                  </ul>
+                </div>
+              </Show>
             </Show>
-          </Show>
+          </div>
+          <div class="h-11 shrink-0 border-t border-lines mx-2" aria-hidden="true" />
         </aside>
       )}
     </SlidingSidebar>
