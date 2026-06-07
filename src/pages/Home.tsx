@@ -12,6 +12,10 @@ export default function Home() {
       <h2 class="mt-24 mb-6 font-black text-center"> updates</h2>
       <div class="grid gap-6">
         <article>
+          <h3 class="mb-1.5 opacity-40">For Manav,</h3>
+          <p>Improved collaborative editing, by keeping the cursor position stable in the face of remote updates.</p>
+        </article>
+        <article>
           <h3 class="mb-1.5 opacity-40">For Nobu,</h3>
           <p>Fixed mobile functionality by adding an open/close button to the sidebar.</p>
         </article>
