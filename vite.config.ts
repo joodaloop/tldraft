@@ -28,6 +28,7 @@ export default defineConfig({
     solid(),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: false,
       includeAssets: ["favicon.ico", "favicon.svg", "apple-touch-icon.png"],
       devOptions: {
         enabled: false,
@@ -35,6 +36,8 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+        skipWaiting: true,
+        clientsClaim: true,
       },
       manifest: {
         name: "tldraft",
