@@ -10,11 +10,13 @@ export default function Home() {
       </p>
 
       <h2 class="mt-24 mb-6 font-black text-center"> updates</h2>
-      <article>
-        <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
-        <p>Improved the sidebar experience by making separate ones for mobile/desktop.</p>
-      </article>
+
       <div class="grid gap-6">
+        <article>
+          <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
+          <p>Improved the sidebar experience by making separate ones for mobile/desktop.</p>
+        </article>
+
         <article>
           <h3 class="mb-1.5 opacity-40">For Manav,</h3>
           <p>Improved collaborative editing, by keeping the cursor position stable in the face of remote updates.</p>
@@ -25,7 +27,7 @@ export default function Home() {
         </article>
         <article>
           <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
-          <p>Added the ability to delete pages if your own them, or just forget them (remove from sidebar) if not.</p>
+          <p>Added the ability to delete pages if you own them, or just forget them (remove from sidebar) if not.</p>
         </article>
       </div>
     </main>
