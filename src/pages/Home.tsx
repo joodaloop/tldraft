@@ -1,6 +1,6 @@
 export default function Home() {
   return (
-    <main class="max-w-sm mx-auto my-32">
+    <main class="max-w-sm mx-auto my-32 px-6">
       <h1 class="text-5xl font-bold text-center mb-6">tldraft</h1>
       <p class="mb-4">Realtime collaborative text editing that also works completely offline, without an account.</p>
 
