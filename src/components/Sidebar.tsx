@@ -210,7 +210,7 @@ export default function Sidebar(props: { activeId?: string }) {
             </Show>
           </div>
 
-          <Show when={!signedOut()}>
+          <Show when={signedOut()}>
             <div class="grid gap-2 mx-2 border-t border-lines px-2 py-4">
               <form method="post" action="/api/login">
                 <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
