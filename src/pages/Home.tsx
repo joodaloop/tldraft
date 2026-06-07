@@ -1,6 +1,6 @@
 export default function Home() {
   return (
-    <main class="max-w-sm mx-auto my-44">
+    <main class="max-w-sm mx-auto my-32">
       <h1 class="text-5xl font-bold text-center mb-6">tldraft</h1>
       <p class="mb-4">Realtime collaborative text editing that also works completely offline, without an account.</p>
 
@@ -10,6 +10,10 @@ export default function Home() {
       </p>
 
       <h2 class="mt-24 mb-6 font-black text-center"> updates</h2>
+      <article>
+        <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
+        <p>Improved the sidebar experience by making separate ones for mobile/desktop.</p>
+      </article>
       <div class="grid gap-6">
         <article>
           <h3 class="mb-1.5 opacity-40">For Manav,</h3>

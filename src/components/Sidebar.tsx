@@ -1,5 +1,15 @@
 import { A, useNavigate } from "@solidjs/router";
-import { createMemo, createSignal, For, onMount, Show, type Accessor, type JSX } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  type Accessor,
+  type JSX,
+} from "solid-js";
 import { usePages } from "../stores/pages";
 import type { DraftSummary } from "../stores/draftSummaries";
 
@@ -7,27 +17,60 @@ type SortKey = "created" | "modified" | "name";
 
 const SORT_STORAGE_KEY = "sidebar-sort";
 const COLLAPSED_STORAGE_KEY = "sidebar-collapsed";
+const MOBILE_SIDEBAR_QUERY = "(max-width: 767px)";
 
-function SlidingSidebar(props: { children: (open: Accessor<boolean>, ready: Accessor<boolean>) => JSX.Element }) {
-  const [open, setOpen] = createSignal(true);
+function isMobileSidebar(): boolean {
+  return typeof window !== "undefined" && window.matchMedia(MOBILE_SIDEBAR_QUERY).matches;
+}
+
+function SlidingSidebar(props: {
+  activeId?: string;
+  children: (open: Accessor<boolean>, ready: Accessor<boolean>, closeIfMobile: () => void) => JSX.Element;
+}) {
+  const [mobile, setMobile] = createSignal(isMobileSidebar());
+  const [open, setOpen] = createSignal(!isMobileSidebar());
   const [ready, setReady] = createSignal(false);
 
-  onMount(() => {
+  const loadDesktopOpen = () => {
     try {
-      setOpen(localStorage.getItem(COLLAPSED_STORAGE_KEY) !== "true");
+      return localStorage.getItem(COLLAPSED_STORAGE_KEY) !== "true";
     } catch {
-      // Ignore storage failures; the sidebar can still work for this session.
+      return true;
     }
+  };
+
+  onMount(() => {
+    const query = window.matchMedia(MOBILE_SIDEBAR_QUERY);
+    const syncMode = () => {
+      setMobile(query.matches);
+      setOpen(query.matches ? false : loadDesktopOpen());
+    };
+
+    query.addEventListener("change", syncMode);
+    syncMode();
     setReady(true);
+
+    onCleanup(() => query.removeEventListener("change", syncMode));
   });
+
+  createEffect(() => {
+    props.activeId;
+    if (mobile()) setOpen(false);
+  });
+
+  const closeIfMobile = () => {
+    if (mobile()) setOpen(false);
+  };
 
   const toggleOpen = () => {
     setOpen((value) => {
       const next = !value;
-      try {
-        localStorage.setItem(COLLAPSED_STORAGE_KEY, String(!next));
-      } catch {
-        // Ignore storage failures; the signal still updates.
+      if (!mobile()) {
+        try {
+          localStorage.setItem(COLLAPSED_STORAGE_KEY, String(!next));
+        } catch {
+          // Ignore storage failures; the signal still updates.
+        }
       }
       return next;
     });
@@ -38,11 +81,11 @@ function SlidingSidebar(props: { children: (open: Accessor<boolean>, ready: Acce
       class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0"
       classList={{
         "transition-[width] duration-200 ease-out": ready(),
-        "w-3xs": open(),
+        "w-3xs max-w-full": open(),
         "w-0": !open(),
       }}
     >
-      {props.children(open, ready)}
+      {props.children(open, ready, closeIfMobile)}
       <button
         type="button"
         class="fixed group -bottom-px w-30 -left-px z-10 p-3 px-4 text-left rounded-tr-lg transition-colors duration-[0s] "
@@ -96,7 +139,7 @@ export default function Sidebar(props: { activeId?: string }) {
 
   const sortedPages = createMemo(() => [...pages()].sort((a, b) => comparePages(a, b, sortBy())));
 
-  const Item = (page: DraftSummary) => (
+  const Item = (page: DraftSummary, closeIfMobile: () => void) => (
     <li>
       <A
         classList={{
@@ -106,6 +149,7 @@ export default function Sidebar(props: { activeId?: string }) {
         }}
         href={`/draft/${encodeURIComponent(page.page_id)}`}
         aria-current={page.page_id === props.activeId ? "page" : undefined}
+        onClick={closeIfMobile}
       >
         {page.title}
       </A>
@@ -113,8 +157,8 @@ export default function Sidebar(props: { activeId?: string }) {
   );
 
   return (
-    <SlidingSidebar>
-      {(open, ready) => (
+    <SlidingSidebar activeId={props.activeId}>
+      {(open, ready, closeIfMobile) => (
         <aside
           class="absolute inset-y-0 left-0 w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none"
           classList={{
@@ -124,7 +168,7 @@ export default function Sidebar(props: { activeId?: string }) {
           aria-label="Your drafts"
         >
           <header class="flex gap-0 justify-between items-center py-3 mx-2 border-b border-lines">
-            <A class="px-2 font-bold" href="/">
+            <A class="px-2 font-bold" href="/" onClick={closeIfMobile}>
               tldraft
             </A>
             <div class="flex items-center gap-0">
@@ -144,7 +188,10 @@ export default function Sidebar(props: { activeId?: string }) {
               <button
                 class="px-1.5 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
                 type="button"
-                onClick={() => navigate(`/draft/${crypto.randomUUID()}`)}
+                onClick={() => {
+                  navigate(`/draft/${crypto.randomUUID()}`);
+                  closeIfMobile();
+                }}
               >
                 +
               </button>
@@ -167,7 +214,7 @@ export default function Sidebar(props: { activeId?: string }) {
               <Show when={pages().length}>
                 <div class="grid gap-1 min-w-0 px-2 pt-3">
                   <ul class="min-w-0">
-                    <For each={sortedPages()}>{Item}</For>
+                    <For each={sortedPages()}>{(page) => Item(page, closeIfMobile)}</For>
                   </ul>
                 </div>
               </Show>
