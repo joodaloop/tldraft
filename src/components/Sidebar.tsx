@@ -200,19 +200,8 @@ export default function Sidebar(props: { activeId?: string }) {
 
           <div class="min-h-0 flex-1 overflow-y-auto">
             <Show when={!loading()} fallback={<p class="py-3 px-4 opacity-50">Loading drafts…</p>}>
-              <Show when={signedOut()}>
-                <div class="grid gap-2 mx-2 border-b border-lines px-2 py-5">
-                  <form method="post" action="/api/login">
-                    <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
-                      Login with Google
-                    </button>
-                  </form>
-                  <p class="opacity-50 text-xs">Sign in to link these drafts to an account across devices.</p>
-                </div>
-              </Show>
-
               <Show when={pages().length}>
-                <div class="grid gap-1 min-w-0 px-2 pt-3">
+                <div class="grid gap-1 min-w-0 px-2 pt-2">
                   <ul class="min-w-0">
                     <For each={sortedPages()}>{(page) => Item(page, closeIfMobile)}</For>
                   </ul>
@@ -220,6 +209,18 @@ export default function Sidebar(props: { activeId?: string }) {
               </Show>
             </Show>
           </div>
+
+          <Show when={!signedOut()}>
+            <div class="grid gap-2 mx-2 border-t border-lines px-2 py-4">
+              <form method="post" action="/api/login">
+                <button class="w-full bg-white py-1.5 rounded-md text-sm border-lines border" type="submit">
+                  Login with Google
+                </button>
+              </form>
+              <p class="opacity-50 text-xs">Sign in to link these drafts to an account across devices.</p>
+            </div>
+          </Show>
+
           <div class="h-11 shrink-0 border-t border-lines mx-2" aria-hidden="true" />
         </aside>
       )}
