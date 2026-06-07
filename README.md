@@ -9,3 +9,7 @@
 - Export to:
   - Markdown
   - HTML
+- For logged in users, diff the local draft list with the server one and send an ownership request to the server for them
+- Update typography for density
+- Put GUI formatting bar on the right, vertically
+- Add overlay behind sidebar on mobile

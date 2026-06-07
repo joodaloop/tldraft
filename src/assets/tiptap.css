@@ -7,7 +7,7 @@
   --base-gap: calc(0.25em * var(--v-space));
   --list-gap: calc(0.1em * var(--v-space));
 
-  --selection: #e1e1e1;
+  --selection: #c4e8fb; /* #e1e1e1; */
   --padding: 24px;
 }
 
