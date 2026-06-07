@@ -1,31 +1,58 @@
 import { A, useNavigate } from "@solidjs/router";
-import { createMemo, createSignal, For, Show, type Accessor, type JSX } from "solid-js";
+import { createMemo, createSignal, For, onMount, Show, type Accessor, type JSX } from "solid-js";
 import { usePages } from "../stores/pages";
 import type { DraftSummary } from "../stores/draftSummaries";
 
 type SortKey = "created" | "modified" | "name";
 
 const SORT_STORAGE_KEY = "sidebar-sort";
+const COLLAPSED_STORAGE_KEY = "sidebar-collapsed";
 
-function SlidingSidebar(props: { children: (open: Accessor<boolean>) => JSX.Element }) {
+function SlidingSidebar(props: { children: (open: Accessor<boolean>, ready: Accessor<boolean>) => JSX.Element }) {
   const [open, setOpen] = createSignal(true);
+  const [ready, setReady] = createSignal(false);
+
+  onMount(() => {
+    try {
+      setOpen(localStorage.getItem(COLLAPSED_STORAGE_KEY) !== "true");
+    } catch {
+      // Ignore storage failures; the sidebar can still work for this session.
+    }
+    setReady(true);
+  });
+
+  const toggleOpen = () => {
+    setOpen((value) => {
+      const next = !value;
+      try {
+        localStorage.setItem(COLLAPSED_STORAGE_KEY, String(!next));
+      } catch {
+        // Ignore storage failures; the signal still updates.
+      }
+      return next;
+    });
+  };
 
   return (
     <div
-      class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0 transition-[width] duration-200 ease-out"
-      classList={{ "w-3xs": open(), "w-0": !open() }}
+      class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0"
+      classList={{
+        "transition-[width] duration-200 ease-out": ready(),
+        "w-3xs": open(),
+        "w-0": !open(),
+      }}
     >
-      {props.children(open)}
+      {props.children(open, ready)}
       <button
         type="button"
-        class="fixed group -bottom-px w-30 -left-px z-10 p-3 px-4 text-left"
+        class="fixed group -bottom-px w-30 -left-px z-10 p-3 px-4 text-left rounded-tr-lg transition-colors duration-[0s] "
         classList={{
-          "": open(),
-          "bg-layer md:bg-transparent rounded-tr-lg": !open(),
+          "delay-100": open(),
+          "bg-layer md:bg-transparent ": !open(),
         }}
         aria-label={open() ? "Hide sidebar" : "Show sidebar"}
         aria-expanded={open()}
-        onClick={() => setOpen((value) => !value)}
+        onClick={toggleOpen}
       >
         <div class="opacity-60 group-hover:opacity-100">{open() ? "hide sidebar" : "show sidebar"}</div>
       </button>
@@ -87,10 +114,13 @@ export default function Sidebar(props: { activeId?: string }) {
 
   return (
     <SlidingSidebar>
-      {(open) => (
+      {(open, ready) => (
         <aside
-          class="absolute inset-y-0 left-0 w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none transition-transform duration-200 ease-out"
-          classList={{ "-translate-x-full": !open() }}
+          class="absolute inset-y-0 left-0 w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none"
+          classList={{
+            "-translate-x-full": !open(),
+            "transition-transform duration-200 ease-out": ready(),
+          }}
           aria-label="Your drafts"
         >
           <header class="flex gap-0 justify-between items-center py-3 mx-2 border-b border-lines">

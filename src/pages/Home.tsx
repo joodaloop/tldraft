@@ -2,7 +2,12 @@ export default function Home() {
   return (
     <main class="max-w-sm mx-auto my-44">
       <h1 class="text-5xl font-bold text-center mb-6">tldraft</h1>
-      <p>Realtime collaborative text editing that also works completely offline, without an account.</p>
+      <p class="mb-4">Realtime collaborative text editing that also works completely offline, without an account.</p>
+
+      <p>
+        The app will <em>always</em> load, regardless of if you're online, and any edits you make while offline will be
+        saved once you reconnect later.
+      </p>
 
       <h2 class="mt-24 mb-6 font-black text-center"> updates</h2>
       <div class="grid gap-6">
