@@ -63,6 +63,14 @@ export default function Home() {
       <div class="grid gap-6">
         <article>
           <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
+          <p>
+            Added "create new draft" button to home page along with doc list. Moved login button to the bottom of the
+            sidebar.
+          </p>
+        </article>
+
+        <article>
+          <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
           <p>Improved the sidebar experience by making separate ones for mobile/desktop.</p>
         </article>
 
