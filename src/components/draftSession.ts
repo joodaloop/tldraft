@@ -3,7 +3,6 @@ import {
   collabKey,
   initCollabState,
   sendableCommit,
-  receiveCommitTransaction,
   getVersion,
   Commit,
 } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
@@ -26,7 +25,7 @@ import {
   saveCachedDoc,
   type CachedDoc,
 } from "../stores/localDocs";
-import { Collab } from "./collabExtension";
+import { Collab, receiveRemoteCommitTransaction } from "./collabExtension";
 
 /** Connection lifecycle, surfaced for an optional status indicator. */
 export type DocStatus =
@@ -249,7 +248,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
 
   const handleCommit = (commitJSON: CommitJSON) => {
     const commit = Commit.FromJSON(editor.state.schema, commitJSON);
-    dispatchCollab(receiveCommitTransaction(editor.state, commit));
+    dispatchCollab(receiveRemoteCommitTransaction(editor.state, commit));
 
     if (inflightRef !== null && commit.ref === inflightRef) inflightRef = null;
 
