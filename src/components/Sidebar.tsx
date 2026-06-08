@@ -81,10 +81,14 @@ function SlidingSidebar(props: {
       class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0"
       classList={{
         "transition-[width] duration-200 ease-out": ready(),
-        "w-3xs max-w-full": open(),
+        "w-2xs md:w-3xs max-w-full": open(),
         "w-0": !open(),
       }}
     >
+      <Show when={open()}>
+        <div class="fixed inset-0 md:hidden bg-chosen/60" />
+      </Show>
+
       {props.children(open, ready, closeIfMobile)}
       <button
         type="button"
@@ -160,7 +164,7 @@ export default function Sidebar(props: { activeId?: string }) {
     <SlidingSidebar activeId={props.activeId}>
       {(open, ready, closeIfMobile) => (
         <aside
-          class="absolute inset-y-0 left-0 w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none"
+          class="absolute inset-y-0 left-0 w-2xs md:w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none"
           classList={{
             "-translate-x-full": !open(),
             "transition-transform duration-200 ease-out": ready(),
