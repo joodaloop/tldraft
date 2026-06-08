@@ -7,7 +7,41 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="robots" content="index,follow" />
+    <meta
+      name="description"
+      content="tldraft is a no-login, offline-first collaborative docs editor for quick drafts that stay editable even when your connection drops."
+    />
+    <link rel="canonical" href="https://tldraft.app/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="tldraft" />
+    <meta property="og:url" content="https://tldraft.app/" />
+    <meta property="og:title" content="tldraft • shareable offline-first docs" />
+    <meta
+      property="og:description"
+      content="Collaborative docs that keep working offline and sync when you reconnect."
+    />
+    <meta property="og:image" content="https://tldraft.app/android-chrome-512x512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="tldraft • shareable offline-first docs" />
+    <meta
+      name="twitter:description"
+      content="Collaborative docs that keep working offline and sync when you reconnect."
+    />
+    <meta name="twitter:image" content="https://tldraft.app/android-chrome-512x512.png" />
+    <meta name="theme-color" content="#f8f8f8" />
     <title>tldraft • shareable offline-first docs</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "tldraft",
+        "url": "https://tldraft.app/",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Any",
+        "description": "A no-login, offline-first collaborative docs editor for quick drafts that stay editable even when your connection drops."
+      }
+    </script>
     <style>
       html,
       body {
@@ -17,7 +51,12 @@
     </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main>
+        <h1>tldraft</h1>
+        <p>Realtime collaborative documents that work completely offline, even without an account.</p>
+      </main>
+    </div>
     <script>
       // Best-effort zoom suppression. Note: the browser's own chrome (menu zoom,
       // some OS-level zoom) cannot be intercepted from JS — this only covers the

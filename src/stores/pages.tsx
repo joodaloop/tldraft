@@ -106,14 +106,19 @@ const PagesContext = createContext<PagesStore>();
 /**
  * Holds the user's drafts at the app root so they're resolved once on load and
  * shared across routes. The server list is seeded synchronously from a
- * localStorage cache (no flash), refreshed by a background /api/pages fetch,
- * and merged with an IndexedDB scan of this device's drafts. `noteLocalPage`
- * lets the editor push live local drafts (and their titles) into the store.
+ * localStorage cache (no flash), refreshed by a background /api/pages fetch
+ * only when we already know the user is signed in, and merged with an
+ * IndexedDB scan of this device's drafts. `noteLocalPage` lets the editor push
+ * live local drafts (and their titles) into the store.
  */
 export function PagesProvider(props: ParentProps) {
   const [cached, setCached] = createSignal<ServerDraftRow[] | null>(loadCachedList());
-  const [server, { refetch, mutate }] = createResource(fetchPages);
+  const [server, { refetch: refetchServer, mutate }] = createResource(currentUserId, fetchPages);
   const [local, setLocal] = createSignal<LocalDraftRow[]>([]);
+
+  const refetch = () => {
+    if (currentUserId() !== null) void refetchServer();
+  };
 
   const noteLocalPage = (
     page_id: string,

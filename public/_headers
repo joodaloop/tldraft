@@ -1,0 +1,6 @@
+/draft/*
+  X-Robots-Tag: noindex, nofollow
+
+/settings
+  X-Robots-Tag: noindex, nofollow
+

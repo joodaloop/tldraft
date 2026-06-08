@@ -13,3 +13,4 @@
 - Update typography for density
 - Put GUI formatting bar on the right, vertically
 - Add overlay behind sidebar on mobile
+- Add a "Pin" button next to Delete/Forget, and a pinned section

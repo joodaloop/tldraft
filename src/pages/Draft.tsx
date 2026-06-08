@@ -1,10 +1,11 @@
 import { useNavigate, useParams } from "@solidjs/router";
-import { createMemo, createSignal, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js";
 import Doc, { type DocStatus } from "../components/Doc";
 import { apiFetch } from "../stores/auth";
 import { usePages } from "../stores/pages";
 
 const DEFAULT_TOP_MESSAGE = "Share the link to this page to collaborate in real time (no live cursors yet).";
+const DEFAULT_DOCUMENT_TITLE = "tldraft • shareable offline-first docs";
 
 function DeleteConfirmation(props: {
   deleting: boolean;
@@ -71,6 +72,11 @@ export default function Draft() {
   const actionProgressLabel = () => (forgetsOnly() ? "Forgetting..." : "Deleting...");
   const actionError = () => `Could not ${forgetsOnly() ? "forget" : "delete"} this draft.`;
 
+  createEffect(() => {
+    const title = activePage()?.title.trim() || "Untitled";
+    document.title = `${title} – tldraft`;
+  });
+
   const showTemporaryMessage = (message: string) => {
     if (topMessageTimer) clearTimeout(topMessageTimer);
     setTemporaryTopMessage(message);
@@ -125,6 +131,7 @@ export default function Draft() {
 
   onCleanup(() => {
     if (topMessageTimer) clearTimeout(topMessageTimer);
+    document.title = DEFAULT_DOCUMENT_TITLE;
   });
 
   return (

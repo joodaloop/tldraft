@@ -7,4 +7,5 @@ import App from "./App.tsx";
 
 const root = document.getElementById("root");
 
+if (root) root.textContent = "";
 render(() => <App />, root!);
