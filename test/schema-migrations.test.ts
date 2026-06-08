@@ -27,16 +27,12 @@ test("a SCHEMA_VERSION bump with no registered migration throws", () => {
 test("renameNodes rewrites matching node types, deeply, leaving others", () => {
   const before = {
     type: "doc",
-    content: [
-      { type: "bullet_list", content: [{ type: "list_item", content: [{ type: "paragraph" }] }] },
-    ],
+    content: [{ type: "bullet_list", content: [{ type: "list_item", content: [{ type: "paragraph" }] }] }],
   };
   const after = renameNodes({ bullet_list: "bulletList", list_item: "listItem" })(before);
   expect(after).toEqual({
     type: "doc",
-    content: [
-      { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph" }] }] },
-    ],
+    content: [{ type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph" }] }] }],
   });
 });
 

@@ -1,5 +1,13 @@
 import { Extension, textInputRule } from "@tiptap/core";
 
+/**
+ * Configuration for directional quotes (open/close pair).
+ */
+export interface DirectionalQuotes {
+  open: string;
+  close: string;
+}
+
 // Negative numbers, such as −5 and minus signs between numbers such as 2 − 1, will have a minus sign instead of a hyphen.
 // Degrees are reformatted to the degree symbol, It doesn't reformat the word “degree” when not following digits
 // Inch or minute markers such as 3' 9" are not converted. Quotation marks in HTML attributes and in code blocks, e.g., var x = "hello world", are not converted.
@@ -155,6 +163,22 @@ export interface TypographyOptions {
    * @default '¾'
    */
   threeQuarters: false | string;
+
+  /**
+   * Directional double quotes configuration.
+   * Use this for explicit LTR/RTL quote control.
+   */
+  doubleQuotes?: {
+    rtl?: DirectionalQuotes;
+  };
+
+  /**
+   * Directional single quotes configuration.
+   * Use this for explicit LTR/RTL quote control.
+   */
+  singleQuotes?: {
+    rtl?: DirectionalQuotes;
+  };
 }
 
 export const biArrow = (override?: string) =>
@@ -352,20 +376,42 @@ export const Typography = Extension.create<TypographyOptions>({
       rules.push(ellipsis(this.options.ellipsis));
     }
 
-    if (this.options.openDoubleQuote !== false) {
-      rules.push(openDoubleQuote(this.options.openDoubleQuote));
+    const isRTL = (this.editor.options as any).textDirection === "rtl";
+
+    if (this.options.doubleQuotes?.rtl) {
+      const { open, close } = this.options.doubleQuotes.rtl;
+
+      rules.push(openDoubleQuote(open));
+      rules.push(closeDoubleQuote(close));
+    } else if (isRTL) {
+      rules.push(openDoubleQuote("\u201D"));
+      rules.push(closeDoubleQuote("\u201C"));
+    } else {
+      if (this.options.openDoubleQuote !== false) {
+        rules.push(openDoubleQuote(this.options.openDoubleQuote));
+      }
+
+      if (this.options.closeDoubleQuote !== false) {
+        rules.push(closeDoubleQuote(this.options.closeDoubleQuote));
+      }
     }
 
-    if (this.options.closeDoubleQuote !== false) {
-      rules.push(closeDoubleQuote(this.options.closeDoubleQuote));
-    }
+    if (this.options.singleQuotes?.rtl) {
+      const { open, close } = this.options.singleQuotes.rtl;
 
-    if (this.options.openSingleQuote !== false) {
-      rules.push(openSingleQuote(this.options.openSingleQuote));
-    }
+      rules.push(openSingleQuote(open));
+      rules.push(closeSingleQuote(close));
+    } else if (isRTL) {
+      rules.push(openSingleQuote("\u2019"));
+      rules.push(closeSingleQuote("\u2018"));
+    } else {
+      if (this.options.openSingleQuote !== false) {
+        rules.push(openSingleQuote(this.options.openSingleQuote));
+      }
 
-    if (this.options.closeSingleQuote !== false) {
-      rules.push(closeSingleQuote(this.options.closeSingleQuote));
+      if (this.options.closeSingleQuote !== false) {
+        rules.push(closeSingleQuote(this.options.closeSingleQuote));
+      }
     }
 
     if (this.options.leftArrow !== false) {

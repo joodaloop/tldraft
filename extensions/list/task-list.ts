@@ -1,85 +1,14 @@
-import { mergeAttributes, Node } from "@tiptap/core";
+import {
+  TaskList as UpstreamTaskList,
+  type TaskListOptions,
+} from "@tiptap/extension-list/task-list";
 
-export interface TaskListOptions {
-  /**
-   * The node type name for a task item.
-   * @default 'taskItem'
-   * @example 'myCustomTaskItem'
-   */
-  itemTypeName: string;
+export type { TaskListOptions };
 
-  /**
-   * The HTML attributes for a task list node.
-   * @default {}
-   * @example { class: 'foo' }
-   */
-  HTMLAttributes: Record<string, any>;
-}
-
-declare module "@tiptap/core" {
-  interface Commands<ReturnType> {
-    taskList: {
-      /**
-       * Toggle a task list
-       * @example editor.commands.toggleTaskList()
-       */
-      toggleTaskList: () => ReturnType;
-    };
-  }
-}
-
-/**
- * This extension allows you to create task lists.
- * @see https://www.tiptap.dev/api/nodes/task-list
- */
-export const TaskList = Node.create<TaskListOptions>({
-  name: "taskList",
-
-  addOptions() {
-    return {
-      itemTypeName: "taskItem",
-      HTMLAttributes: {},
-    };
-  },
-
-  group: "block list",
-
-  content() {
-    return `${this.options.itemTypeName}+`;
-  },
-
-  parseHTML() {
-    return [
-      {
-        tag: `ul[data-type="${this.name}"]`,
-        priority: 51,
-      },
-    ];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return [
-      "ul",
-      mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-        "data-type": this.name,
-      }),
-      0,
-    ];
-  },
-
-  addCommands() {
-    return {
-      toggleTaskList:
-        () =>
-        ({ commands }) => {
-          return commands.toggleList(this.name, this.options.itemTypeName);
-        },
-    };
-  },
-
+export const TaskList = UpstreamTaskList.extend<TaskListOptions>({
   addKeyboardShortcuts() {
     return {
-      "Mod-Shift-9": () => this.editor.commands.toggleTaskList(),
+      ...this.parent?.(),
       "Mod-Alt-9": () => this.editor.commands.toggleTaskList(),
       "Mod-Alt-t": () => this.editor.commands.toggleTaskList(),
     };

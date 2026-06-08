@@ -1,2 +1,5 @@
-export * from "./list-keymap.js";
-export * as listHelpers from "./listHelpers/index.js";
+export {
+  ListKeymap,
+  type ListKeymapOptions,
+  listHelpers,
+} from "@tiptap/extension-list/keymap";

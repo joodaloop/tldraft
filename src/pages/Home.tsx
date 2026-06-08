@@ -6,10 +6,12 @@ export default function Home() {
   const navigate = useNavigate();
   const { pages, loading } = usePages();
 
-  const recentPages = createMemo(() =>
-    [...pages()]
-      .sort((a, b) => (b.updated_at || b.created_at || "").localeCompare(a.updated_at || a.created_at || ""))
-      .slice(0, 5),
+  const recentPages = createMemo(
+    () =>
+      [...pages()].sort((a, b) =>
+        (b.updated_at || b.created_at || "").localeCompare(a.updated_at || a.created_at || ""),
+      ),
+    // .slice(0, 5),
   );
 
   const newDraft = () => {

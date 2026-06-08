@@ -135,6 +135,36 @@ export const CodeBlock = Node.create<CodeBlockOptions>({
     ];
   },
 
+  markdownTokenName: "code",
+
+  parseMarkdown: (token, helpers) => {
+    if (
+      token.raw?.startsWith("```") === false &&
+      token.raw?.startsWith("~~~") === false &&
+      token.codeBlockStyle !== "indented"
+    ) {
+      return [];
+    }
+
+    return helpers.createNode(
+      "codeBlock",
+      { language: token.lang || null },
+      token.text ? [helpers.createTextNode(token.text)] : [],
+    );
+  },
+
+  renderMarkdown: (node, h) => {
+    const language = node.attrs?.language || "";
+
+    if (!node.content) {
+      return `\`\`\`${language}\n\n\`\`\``;
+    }
+
+    return [`\`\`\`${language}`, h.renderChildren(node.content), "```"].join(
+      "\n",
+    );
+  },
+
   addCommands() {
     return {
       setCodeBlock:
