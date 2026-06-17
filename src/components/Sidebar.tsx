@@ -4,93 +4,47 @@ import {
   createMemo,
   createSignal,
   For,
-  onCleanup,
-  onMount,
   Show,
-  type Accessor,
   type JSX,
 } from "solid-js";
 import { usePages } from "../stores/pages";
+import { ui } from "../stores/ui";
 import type { DraftSummary } from "../stores/draftSummaries";
 
 type SortKey = "created" | "modified" | "name";
 
 const SORT_STORAGE_KEY = "sidebar-sort";
-const COLLAPSED_STORAGE_KEY = "sidebar-collapsed";
-const MOBILE_SIDEBAR_QUERY = "(max-width: 767px)";
-
-function isMobileSidebar(): boolean {
-  return typeof window !== "undefined" && window.matchMedia(MOBILE_SIDEBAR_QUERY).matches;
-}
 
 function SlidingSidebar(props: {
-  activeId?: string;
-  children: (open: Accessor<boolean>, ready: Accessor<boolean>, closeIfMobile: () => void) => JSX.Element;
+  children: (
+    closeIfMobile: () => void,
+  ) => JSX.Element;
 }) {
-  const [mobile, setMobile] = createSignal(isMobileSidebar());
-  const [open, setOpen] = createSignal(!isMobileSidebar());
-  const [ready, setReady] = createSignal(false);
-
-  const loadDesktopOpen = () => {
-    try {
-      return localStorage.getItem(COLLAPSED_STORAGE_KEY) !== "true";
-    } catch {
-      return true;
-    }
-  };
-
-  onMount(() => {
-    const query = window.matchMedia(MOBILE_SIDEBAR_QUERY);
-    const syncMode = () => {
-      setMobile(query.matches);
-      setOpen(query.matches ? false : loadDesktopOpen());
-    };
-
-    query.addEventListener("change", syncMode);
-    syncMode();
-    setReady(true);
-
-    onCleanup(() => query.removeEventListener("change", syncMode));
-  });
-
-  createEffect(() => {
-    props.activeId;
-    if (mobile()) setOpen(false);
-  });
-
-  const closeIfMobile = () => {
-    if (mobile()) setOpen(false);
-  };
-
-  const toggleOpen = () => {
-    setOpen((value) => {
-      const next = !value;
-      if (!mobile()) {
-        try {
-          localStorage.setItem(COLLAPSED_STORAGE_KEY, String(!next));
-        } catch {
-          // Ignore storage failures; the signal still updates.
-        }
-      }
-      return next;
-    });
-  };
-
   return (
     <div
       class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0"
       classList={{
-        "transition-[width] duration-200 ease-out": ready(),
-        "w-2xs md:w-3xs max-w-full": open(),
-        "w-0": !open(),
+        "transition-[width] duration-200 ease-out": ui.sidebarReady(),
+        "w-2xs md:w-3xs max-w-full": ui.sidebarOpen(),
+        "w-0": !ui.sidebarOpen(),
       }}
     >
-      <Show when={open()}>
+      <Show when={ui.sidebarOpen()}>
         <div class="fixed inset-0 md:hidden bg-chosen/60" />
       </Show>
 
-      {props.children(open, ready, closeIfMobile)}
+      {props.children(ui.closeSidebarIfMobile)}
+
       <button
+        onclick={ui.toggleSidebar}
+        class="absolute top-2.5 -right-9 bg-background w-7 flex items-center justify-center p-1 z-10"
+      >
+        <div class="opacity-40 hover:opacity-100">
+          <SidebarIcon />
+        </div>
+      </button>
+
+      {/*<button
         type="button"
         class="fixed group -bottom-px w-30 -left-px z-10 p-3 px-4 text-left rounded-tr-lg transition-colors duration-[0s] "
         classList={{
@@ -102,7 +56,7 @@ function SlidingSidebar(props: {
         onClick={toggleOpen}
       >
         <div class="opacity-60 group-hover:opacity-100">{open() ? "hide sidebar" : "show sidebar"}</div>
-      </button>
+      </button>*/}
     </div>
   );
 }
@@ -125,16 +79,15 @@ function comparePages(a: DraftSummary, b: DraftSummary, key: SortKey): number {
   return (b.created_at || "").localeCompare(a.created_at || "");
 }
 
-/**
- * Lists the user's drafts. The resource is owned by the app root (see
- * `PagesProvider`), which merges the server list with this device's local
- * IndexedDB cache; this component just renders its loading / signed-out /
- * empty / loaded states.
- */
 export default function Sidebar(props: { activeId?: string }) {
   const { pages, loading, signedOut } = usePages();
   const navigate = useNavigate();
   const [sortBy, setSortBy] = createSignal<SortKey>(loadSort());
+
+  createEffect(() => {
+    props.activeId;
+    ui.closeSidebarIfMobile();
+  });
 
   const changeSort = (key: SortKey) => {
     setSortBy(key);
@@ -161,13 +114,13 @@ export default function Sidebar(props: { activeId?: string }) {
   );
 
   return (
-    <SlidingSidebar activeId={props.activeId}>
-      {(open, ready, closeIfMobile) => (
+    <SlidingSidebar>
+      {(closeIfMobile) => (
         <aside
           class="absolute inset-y-0 left-0 w-2xs md:w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none"
           classList={{
-            "-translate-x-full": !open(),
-            "transition-transform duration-200 ease-out": ready(),
+            "-translate-x-full": !ui.sidebarOpen(),
+            "transition-transform duration-200 ease-out": ui.sidebarReady(),
           }}
           aria-label="Your drafts"
         >
@@ -175,7 +128,7 @@ export default function Sidebar(props: { activeId?: string }) {
             <A class="px-2 font-bold" href="/" onClick={closeIfMobile}>
               tldraft
             </A>
-            <div class="flex items-center gap-0">
+            <div class="flex items-center gap-0 -mr-2">
               <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
                 <span aria-hidden="true">↓</span>
                 <select
@@ -190,7 +143,7 @@ export default function Sidebar(props: { activeId?: string }) {
                 </select>
               </div>
               <button
-                class="px-1.5 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
+                class="px-1.5 pb-0.5 pr-3 text-lg! leading-4 opacity-40 hover:opacity-100"
                 type="button"
                 onClick={() => {
                   navigate(`/draft/${crypto.randomUUID()}`);
@@ -229,5 +182,26 @@ export default function Sidebar(props: { activeId?: string }) {
         </aside>
       )}
     </SlidingSidebar>
+  );
+}
+
+function SidebarIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="icon icon-tabler icons-tabler-outline icon-tabler-layout-sidebar"
+    >
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12" />
+      <path d="M9 4l0 16" />
+    </svg>
   );
 }

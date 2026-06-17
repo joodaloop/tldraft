@@ -1,13 +1,38 @@
 import { Route, Router, useLocation, useParams } from "@solidjs/router";
-import { createEffect, type JSX } from "solid-js";
+import { createEffect, onCleanup, onMount, type JSX } from "solid-js";
 import Draft from "./pages/Draft";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import Sidebar from "./components/Sidebar";
 import { PagesProvider } from "./stores/pages";
+import { ui } from "./stores/ui";
+
+function AppShell(props: { children?: JSX.Element }) {
+  const params = useParams();
+
+  ui.mount();
+
+  onMount(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        ui.toggleSidebar();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    onCleanup(() => window.removeEventListener("keydown", onKeyDown));
+  });
+
+  return (
+    <div class="flex bg-background">
+      <Sidebar activeId={params.id} />
+      <div class="w-full h-dvh overflow-auto">{props.children}</div>
+    </div>
+  );
+}
 
 function AppLayout(props: { children?: JSX.Element }) {
-  const params = useParams();
   const location = useLocation();
 
   createEffect(() => {
@@ -17,10 +42,7 @@ function AppLayout(props: { children?: JSX.Element }) {
 
   return (
     <PagesProvider>
-      <div class="flex bg-background">
-        <Sidebar activeId={params.id} />
-        <div class="w-full h-dvh overflow-auto">{props.children}</div>
-      </div>
+      <AppShell>{props.children}</AppShell>
     </PagesProvider>
   );
 }
