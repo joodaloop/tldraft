@@ -14,9 +14,18 @@ function AppShell(props: { children?: JSX.Element }) {
 
   onMount(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey && event.key.toLowerCase() === "b") {
+      const key = event.key.toLowerCase();
+      const commandOnly = event.metaKey && !event.altKey && !event.ctrlKey && !event.shiftKey;
+
+      if (commandOnly && key === "b") {
         event.preventDefault();
         ui.toggleSidebar();
+      }
+
+      if (commandOnly && key === "k") {
+        event.preventDefault();
+        ui.openSidebar();
+        requestAnimationFrame(() => window.dispatchEvent(new Event("drafts:focus-sidebar-search")));
       }
     };
 

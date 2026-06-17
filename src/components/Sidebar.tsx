@@ -1,12 +1,5 @@
 import { A, useNavigate } from "@solidjs/router";
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  For,
-  Show,
-  type JSX,
-} from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { usePages } from "../stores/pages";
 import { ui } from "../stores/ui";
 import type { DraftSummary } from "../stores/draftSummaries";
@@ -15,11 +8,7 @@ type SortKey = "created" | "modified" | "name";
 
 const SORT_STORAGE_KEY = "sidebar-sort";
 
-function SlidingSidebar(props: {
-  children: (
-    closeIfMobile: () => void,
-  ) => JSX.Element;
-}) {
+function SlidingSidebar(props: { children: (closeIfMobile: () => void) => JSX.Element }) {
   return (
     <div
       class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0"
@@ -34,15 +23,6 @@ function SlidingSidebar(props: {
       </Show>
 
       {props.children(ui.closeSidebarIfMobile)}
-
-      <button
-        onclick={ui.toggleSidebar}
-        class="absolute top-2.5 -right-9 bg-background w-7 flex items-center justify-center p-1 z-10"
-      >
-        <div class="opacity-40 hover:opacity-100">
-          <SidebarIcon />
-        </div>
-      </button>
 
       {/*<button
         type="button"
@@ -83,10 +63,21 @@ export default function Sidebar(props: { activeId?: string }) {
   const { pages, loading, signedOut } = usePages();
   const navigate = useNavigate();
   const [sortBy, setSortBy] = createSignal<SortKey>(loadSort());
+  let searchInput!: HTMLInputElement;
 
   createEffect(() => {
     props.activeId;
     ui.closeSidebarIfMobile();
+  });
+
+  onMount(() => {
+    const focusSearch = () => {
+      searchInput.focus();
+      searchInput.select();
+    };
+
+    window.addEventListener("drafts:focus-sidebar-search", focusSearch);
+    onCleanup(() => window.removeEventListener("drafts:focus-sidebar-search", focusSearch));
   });
 
   const changeSort = (key: SortKey) => {
@@ -124,11 +115,20 @@ export default function Sidebar(props: { activeId?: string }) {
           }}
           aria-label="Your drafts"
         >
-          <header class="flex gap-0 justify-between items-center py-3 mx-2 border-b border-lines">
+          <header class="flex gap-0 justify-between items-center py-2 mx-2">
             <A class="px-2 font-bold" href="/" onClick={closeIfMobile}>
               tldraft
             </A>
-            <div class="flex items-center gap-0 -mr-2">
+            <button onclick={ui.toggleSidebar} class="w-7 flex items-center justify-center p-1 z-10">
+              <div class="opacity-40 hover:opacity-100">
+                <SidebarIcon />
+              </div>
+            </button>
+          </header>
+
+          <div>
+            <div class="flex items-center gap-0 mx-2 border-y border-y-lines px-1 py-1">
+              <input ref={searchInput} placeholder="Search..." class="w-full rounded-md py-2 px-1 outline-0" />
               <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
                 <span aria-hidden="true">↓</span>
                 <select
@@ -143,7 +143,7 @@ export default function Sidebar(props: { activeId?: string }) {
                 </select>
               </div>
               <button
-                class="px-1.5 pb-0.5 pr-3 text-lg! leading-4 opacity-40 hover:opacity-100"
+                class="px-1 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
                 type="button"
                 onClick={() => {
                   navigate(`/draft/${crypto.randomUUID()}`);
@@ -153,7 +153,7 @@ export default function Sidebar(props: { activeId?: string }) {
                 +
               </button>
             </div>
-          </header>
+          </div>
 
           <div class="min-h-0 flex-1 overflow-y-auto">
             <Show when={!loading()} fallback={<p class="py-3 px-4 opacity-50">Loading drafts…</p>}>
@@ -178,7 +178,33 @@ export default function Sidebar(props: { activeId?: string }) {
             </div>
           </Show>
 
-          <div class="h-11 shrink-0 border-t border-lines mx-2" aria-hidden="true" />
+          <div class="mx-2 border-t border-lines px-2 py-3 flex justify-between gap-4">
+            <input
+              aria-label="Username"
+              class="w-full rounded-md bg-transparent outline-0"
+              placeholder="anonymoose"
+              value={ui.username()}
+              onInput={(event) => ui.setUsername(event.currentTarget.value)}
+            />
+            <A class="opacity-40 hover:opacity-100" href="/settings">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="icon icon-tabler icons-tabler-outline icon-tabler-settings"
+              >
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" />
+                <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+              </svg>
+            </A>
+          </div>
         </aside>
       )}
     </SlidingSidebar>

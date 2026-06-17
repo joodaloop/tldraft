@@ -1,16 +1,9 @@
-import { A } from '@solidjs/router'
+import { A } from "@solidjs/router";
 
 export default function Settings() {
   return (
-    <main class="page-shell">
-      <section class="page-card">
-        <p class="eyebrow">Settings</p>
-        <h1>Workspace settings</h1>
-        <p>Manage editor preferences and collaboration defaults for your drafts.</p>
-        <A class="button" href="/">
-          Back home
-        </A>
-      </section>
+    <main class="max-w-3xl mx-auto py-24">
+      <section class="page-card">Nothing yet, sorry.</section>
     </main>
-  )
+  );
 }

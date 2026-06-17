@@ -3,6 +3,7 @@ import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-j
 import Doc, { type DocStatus } from "../components/Doc";
 import { apiFetch } from "../stores/auth";
 import { usePages } from "../stores/pages";
+import { ui } from "../stores/ui";
 import type { PresencePeer } from "../../worker/protocol";
 
 const DEFAULT_DOCUMENT_TITLE = "tldraft • shareable offline-first docs";
@@ -57,7 +58,7 @@ export default function Draft() {
   const [confirmingDeleteId, setConfirmingDeleteId] = createSignal<string | null>(null);
   const [deletingId, setDeletingId] = createSignal<string | null>(null);
   const [temporaryTopMessage, setTemporaryTopMessage] = createSignal<string | null>(null);
-  const [livePeers, setLivePeers] = createSignal<PresencePeer[]>([]);
+  const [, setLivePeers] = createSignal<PresencePeer[]>([]);
   let topMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
   const activePage = createMemo(() => pages().find((page) => page.page_id === params.id));
@@ -148,7 +149,7 @@ export default function Draft() {
           {(id) => (
             <Doc
               room={id}
-              username={"DEFAULT USER"}
+              username={ui.username()}
               onPresence={setLivePeers}
               onStatus={setStatus}
               onTitle={(title, updatedAt, hasUnconfirmedChanges) =>
