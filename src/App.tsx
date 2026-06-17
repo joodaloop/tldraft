@@ -36,7 +36,7 @@ function AppShell(props: { children?: JSX.Element }) {
   });
 
   return (
-    <div class="relative flex bg-background">
+    <div class="relative flex h-dvh overflow-hidden bg-background">
       <button
         type="button"
         aria-label="Show sidebar"
@@ -51,7 +51,12 @@ function AppShell(props: { children?: JSX.Element }) {
         <SidebarIcon />
       </button>
       <Sidebar activeId={params.id} />
-      <div class="w-full h-dvh overflow-auto">{props.children}</div>
+      <div
+        class="min-w-0 flex-1 h-dvh overflow-y-auto overscroll-contain transition-[padding-left] duration-200 ease-out"
+        classList={{ "md:pl-[var(--container-3xs)]": ui.sidebarOpen() }}
+      >
+        {props.children}
+      </div>
     </div>
   );
 }

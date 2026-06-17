@@ -1,8 +1,6 @@
 ## todo
-- bring back delete and forget
 - Shareable URLs:
   - Revocable edit
-  - Permanent edit
   - Revocable read
 
 ## later

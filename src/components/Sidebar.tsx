@@ -12,7 +12,7 @@ const SORT_STORAGE_KEY = "sidebar-sort";
 function SlidingSidebar(props: { children: (closeIfMobile: () => void) => JSX.Element }) {
   return (
     <div
-      class="absolute md:relative inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0"
+      class="fixed inset-y-0 left-0 z-20 h-dvh shrink-0 grow-0"
       classList={{
         "transition-[width] duration-200 ease-out": ui.sidebarReady(),
         "w-2xs md:w-3xs max-w-full": ui.sidebarOpen(),
@@ -153,7 +153,7 @@ function DraftSearchAndList(props: {
         </div>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto">
+      <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <Show when={!props.loading} fallback={<p class="py-3 px-4 opacity-50">Loading drafts…</p>}>
           <Show when={visiblePages().length}>
             <div class="grid gap-1 min-w-0 px-2 pt-2">
@@ -180,7 +180,7 @@ export default function Sidebar(props: { activeId?: string }) {
     <SlidingSidebar>
       {(closeIfMobile) => (
         <aside
-          class="absolute inset-y-0 left-0 w-2xs md:w-3xs bg-layer flex flex-col h-dvh border-r border-lines text-sm select-none"
+          class="absolute inset-y-0 left-0 w-2xs md:w-3xs bg-layer flex flex-col h-dvh overscroll-contain border-r border-lines text-sm select-none"
           classList={{
             "-translate-x-full": !ui.sidebarOpen(),
             "transition-transform duration-200 ease-out": ui.sidebarReady(),

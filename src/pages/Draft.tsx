@@ -6,7 +6,6 @@ import { usePages } from "../stores/pages";
 import { ui } from "../stores/ui";
 import type { PresencePeer } from "../../worker/protocol";
 import { displayTitle } from "../../shared/pageText";
-import { MenuBar } from "../components/MenuBar";
 
 const DEFAULT_DOCUMENT_TITLE = "tldraft • shareable offline-first docs";
 
@@ -130,16 +129,30 @@ export default function Draft() {
 
   return (
     <main class="w-full relative">
-      <MenuBar />
+      <div class="fixed w-full top-0 left-0 bg-background border-b border-b-lines z-10">
+        <div class="flex justify-between items-center">
+          <div class="lg:w-8"></div>
+          <div
+            class="hidden lg:block text-center w-full text-sm opacity-40"
+            classList={{ "text-red-800 opacity-100": topMessageIsAlert() }}
+            role="status"
+          >
+            {hasOfflineChanges()}
+          </div>
+          <div class="flex">
+            <button
+              type="button"
+              class="p-2.5 px-3 opacity-40 hover:opacity-100 disabled:pointer-events-none disabled:opacity-20"
+              disabled={!params.id || deleting()}
+              onClick={() => params.id && setConfirmingDeleteId(params.id)}
+            >
+              remove
+            </button>
+          </div>
+        </div>
+      </div>
 
       <section class="mx-auto w-full max-w-4xl py-24">
-        <div
-          class="hidden lg:block absolute top-3 left-0 text-center w-full text-sm opacity-40 px-8"
-          classList={{ "text-red-800 opacity-100": topMessageIsAlert() }}
-          role="status"
-        >
-          {hasOfflineChanges()}
-        </div>
         <Show when={confirmingDelete() || deleting()}>
           <DeleteConfirmation
             deleting={deleting()}
