@@ -45,6 +45,36 @@
   background-color: var(--selection);
 }
 
+.remote-cursor {
+  --remote-cursor-color: #2563eb;
+  border-left: 1px solid var(--remote-cursor-color);
+  border-right: 1px solid var(--remote-cursor-color);
+  margin-left: -1px;
+  margin-right: -1px;
+  pointer-events: none;
+  position: relative;
+  word-break: normal;
+}
+
+.remote-cursor::after {
+  border-radius: 3px 3px 3px 0;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+  left: -1px;
+  line-height: 1em;
+  padding: 5px 5px 4px 5px;
+  position: absolute;
+  top: -1.6em;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  content: attr(data-username);
+  background: var(--remote-cursor-color);
+  color: white;
+}
+
 /* Only hint on the title (any empty heading) and the first body paragraph —
    not on every empty paragraph deeper in the doc. */
 .tiptap > .is-empty:is(h1, h2, h3, h4, h5, h6):first-child::before {
