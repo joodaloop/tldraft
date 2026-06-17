@@ -1,6 +1,7 @@
 import { A, useNavigate } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { usePages } from "../stores/pages";
+import { SettingsIcon, SidebarIcon } from "./icons";
 import { DEFAULT_USERNAME, ui } from "../stores/ui";
 import type { DraftSummary } from "../stores/draftSummaries";
 
@@ -64,16 +65,16 @@ function comparePages(a: DraftSummary, b: DraftSummary, key: SortKey): number {
   return (b.created_at || "").localeCompare(a.created_at || "");
 }
 
-export default function Sidebar(props: { activeId?: string }) {
-  const { pages, loading, signedOut } = usePages();
+function DraftSearchAndList(props: {
+  activeId?: string;
+  pages: DraftSummary[];
+  loading: boolean;
+  closeIfMobile: () => void;
+}) {
   const navigate = useNavigate();
+  const [query, setQuery] = createSignal("");
   const [sortBy, setSortBy] = createSignal<SortKey>(loadSort());
   let searchInput!: HTMLInputElement;
-
-  createEffect(() => {
-    props.activeId;
-    ui.closeSidebarIfMobile();
-  });
 
   onMount(() => {
     const focusSearch = () => {
@@ -90,9 +91,15 @@ export default function Sidebar(props: { activeId?: string }) {
     localStorage.setItem(SORT_STORAGE_KEY, key);
   };
 
-  const sortedPages = createMemo(() => [...pages()].sort((a, b) => comparePages(a, b, sortBy())));
+  const visiblePages = createMemo(() => {
+    const search = query().trim().toLocaleLowerCase();
+    const filtered = search
+      ? props.pages.filter((page) => page.title.toLocaleLowerCase().includes(search))
+      : props.pages;
+    return [...filtered].sort((a, b) => comparePages(a, b, sortBy()));
+  });
 
-  const Item = (page: DraftSummary, closeIfMobile: () => void) => (
+  const Item = (page: DraftSummary) => (
     <li>
       <A
         classList={{
@@ -102,12 +109,72 @@ export default function Sidebar(props: { activeId?: string }) {
         }}
         href={`/draft/${encodeURIComponent(page.page_id)}`}
         aria-current={page.page_id === props.activeId ? "page" : undefined}
-        onClick={closeIfMobile}
+        onClick={props.closeIfMobile}
       >
         {page.title}
       </A>
     </li>
   );
+
+  return (
+    <>
+      <div>
+        <div class="flex items-center gap-0 mx-2 border-y border-y-lines px-1 py-1">
+          <input
+            ref={searchInput}
+            placeholder="Search..."
+            class="w-full rounded-md py-2 px-1 outline-0"
+            value={query()}
+            onInput={(event) => setQuery(event.currentTarget.value)}
+          />
+          <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
+            <span aria-hidden="true">↓</span>
+            <select
+              class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              aria-label="Sort drafts"
+              value={sortBy()}
+              onChange={(e) => changeSort(e.currentTarget.value as SortKey)}
+            >
+              <option value="created">created</option>
+              <option value="modified">modified</option>
+              <option value="name">name</option>
+            </select>
+          </div>
+          <button
+            class="px-1 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
+            type="button"
+            onClick={() => {
+              navigate(`/draft/${crypto.randomUUID()}`);
+              props.closeIfMobile();
+            }}
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        <Show when={!props.loading} fallback={<p class="py-3 px-4 opacity-50">Loading drafts…</p>}>
+          <Show when={visiblePages().length}>
+            <div class="grid gap-1 min-w-0 px-2 pt-2">
+              <ul class="min-w-0">
+                <For each={visiblePages()}>{Item}</For>
+              </ul>
+            </div>
+          </Show>
+        </Show>
+      </div>
+    </>
+  );
+}
+
+export default function Sidebar(props: { activeId?: string }) {
+  const { pages, loading, signedOut } = usePages();
+
+  createEffect(() => {
+    props.activeId;
+    ui.closeSidebarIfMobile();
+  });
 
   return (
     <SlidingSidebar>
@@ -131,46 +198,12 @@ export default function Sidebar(props: { activeId?: string }) {
             </button>
           </header>
 
-          <div>
-            <div class="flex items-center gap-0 mx-2 border-y border-y-lines px-1 py-1">
-              <input ref={searchInput} placeholder="Search..." class="w-full rounded-md py-2 px-1 outline-0" />
-              <div class="relative px-2 opacity-40 hover:opacity-100" aria-hidden="false">
-                <span aria-hidden="true">↓</span>
-                <select
-                  class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  aria-label="Sort drafts"
-                  value={sortBy()}
-                  onChange={(e) => changeSort(e.currentTarget.value as SortKey)}
-                >
-                  <option value="created">created</option>
-                  <option value="modified">modified</option>
-                  <option value="name">name</option>
-                </select>
-              </div>
-              <button
-                class="px-1 pb-0.5 text-lg! leading-4 opacity-40 hover:opacity-100"
-                type="button"
-                onClick={() => {
-                  navigate(`/draft/${crypto.randomUUID()}`);
-                  closeIfMobile();
-                }}
-              >
-                +
-              </button>
-            </div>
-          </div>
-
-          <div class="min-h-0 flex-1 overflow-y-auto">
-            <Show when={!loading()} fallback={<p class="py-3 px-4 opacity-50">Loading drafts…</p>}>
-              <Show when={pages().length}>
-                <div class="grid gap-1 min-w-0 px-2 pt-2">
-                  <ul class="min-w-0">
-                    <For each={sortedPages()}>{(page) => Item(page, closeIfMobile)}</For>
-                  </ul>
-                </div>
-              </Show>
-            </Show>
-          </div>
+          <DraftSearchAndList
+            activeId={props.activeId}
+            pages={pages()}
+            loading={loading()}
+            closeIfMobile={closeIfMobile}
+          />
 
           <Show when={signedOut()}>
             <div class="grid gap-2 mx-2 border-t border-lines px-2 py-4">
@@ -192,47 +225,11 @@ export default function Sidebar(props: { activeId?: string }) {
               onInput={(event) => ui.setUsername(event.currentTarget.value)}
             />
             <A class="opacity-40 hover:opacity-100" href="/settings">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                class="icon icon-tabler icons-tabler-outline icon-tabler-settings"
-              >
-                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                <path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065" />
-                <path d="M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
-              </svg>
+              <SettingsIcon />
             </A>
           </div>
         </aside>
       )}
     </SlidingSidebar>
-  );
-}
-
-function SidebarIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      class="icon icon-tabler icons-tabler-outline icon-tabler-layout-sidebar"
-    >
-      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-      <path d="M4 6a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v12a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2l0 -12" />
-      <path d="M9 4l0 16" />
-    </svg>
   );
 }

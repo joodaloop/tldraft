@@ -6,6 +6,7 @@ import { usePages } from "../stores/pages";
 import { ui } from "../stores/ui";
 import type { PresencePeer } from "../../worker/protocol";
 import { displayTitle } from "../../shared/pageText";
+import { MenuBar } from "../components/MenuBar";
 
 const DEFAULT_DOCUMENT_TITLE = "tldraft • shareable offline-first docs";
 
@@ -129,6 +130,8 @@ export default function Draft() {
 
   return (
     <main class="w-full relative">
+      <MenuBar />
+
       <section class="mx-auto w-full max-w-4xl py-24">
         <div
           class="hidden lg:block absolute top-3 left-0 text-center w-full text-sm opacity-40 px-8"
