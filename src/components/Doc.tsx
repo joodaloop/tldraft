@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { startDraftSession, type DocStatus } from "./draftSession";
+import type { PresencePeer } from "../../worker/protocol";
 
 import "prosemirror-view/style/prosemirror.css";
 
@@ -25,6 +26,8 @@ export interface DocProps {
     updatedAt?: string,
     hasUnconfirmedChanges?: boolean,
   ) => void;
+  username?: string;
+  onPresence?: (peers: PresencePeer[]) => void;
 }
 
 export default function Doc(props: DocProps): JSX.Element {
@@ -45,6 +48,8 @@ export default function Doc(props: DocProps): JSX.Element {
       onStatus: setDocStatus,
       onReady: setReady,
       onTitle: props.onTitle,
+      getUsername: () => props.username ?? "",
+      onPresence: props.onPresence,
     });
     onCleanup(stop);
   });

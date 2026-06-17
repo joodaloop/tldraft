@@ -17,6 +17,7 @@ import { pageTextFromDoc } from "../../shared/pageText";
 import {
   serverMessageSchema,
   type ClientMessage,
+  type PresencePeer,
   type ServerMessage,
 } from "../../worker/protocol";
 import {
@@ -26,6 +27,11 @@ import {
   type CachedDoc,
 } from "../stores/localDocs";
 import { Collab, receiveRemoteCommitTransaction } from "./collabExtension";
+import {
+  mapRemotePresenceTransaction,
+  Presence,
+  setRemotePresenceTransaction,
+} from "./presenceExtension";
 
 /** Connection lifecycle, surfaced for an optional status indicator. */
 export type DocStatus =
@@ -58,15 +64,39 @@ export interface DraftSessionOptions {
     updatedAt?: string,
     hasUnconfirmedChanges?: boolean,
   ) => void;
+  /** Current display name for this browser tab, persisted by the page shell. */
+  getUsername?: () => string;
+  /** Notified with the other live clients in this document. */
+  onPresence?: (peers: PresencePeer[]) => void;
 }
 
 // The @cloudflare/vite-plugin runs the Worker + Durable Object inside the Vite
 // dev server, so in dev the worker lives on the Vite origin too — same as prod.
 const defaultHost = () => window.location.host;
+const presenceColors = ["#0f766e", "#b45309", "#2563eb", "#be123c", "#6d28d9", "#15803d"];
+
+function randomId(): string {
+  return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
+}
+
+function colorForClient(clientId: string): string {
+  let hash = 0;
+  for (let i = 0; i < clientId.length; i++) {
+    hash = (hash * 31 + clientId.charCodeAt(i)) | 0;
+  }
+  return presenceColors[Math.abs(hash) % presenceColors.length];
+}
+
+function cleanUsername(username: string | undefined): string {
+  const cleaned = username?.trim().replace(/\s+/g, " ").slice(0, 80);
+  return cleaned || "Anonymous";
+}
 
 export function startDraftSession(options: DraftSessionOptions): () => void {
   let editor: Editor;
   let socket: PartySocket | undefined;
+  const clientId = randomId();
+  const color = colorForClient(clientId);
 
   // True once we've seeded from the server's first snapshot.
   let initialized = false;
@@ -86,6 +116,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
   // Set once the view is torn down, so a late IndexedDB load doesn't connect.
   let disposed = false;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let presenceTimer: ReturnType<typeof setTimeout> | undefined;
   let cacheWrite: Promise<void> = Promise.resolve();
 
   const dispatchCollab = (tr: Parameters<typeof editor.view.dispatch>[0]) => {
@@ -168,6 +199,32 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
 
   const send = (msg: ClientMessage) => socket?.send(JSON.stringify(msg));
 
+  const currentPresence = (): PresencePeer => ({
+    clientId,
+    username: cleanUsername(options.getUsername?.()),
+    color,
+    version: getVersion(editor.state) ?? 0,
+    selection: initialized
+      ? {
+          anchor: editor.state.selection.anchor,
+          head: editor.state.selection.head,
+        }
+      : null,
+  });
+
+  const sendPresence = () => {
+    if (halted || !socket || socket.readyState !== WebSocket.OPEN) return;
+    send({ type: "presence", peer: currentPresence() });
+  };
+
+  const schedulePresence = () => {
+    if (presenceTimer) clearTimeout(presenceTimer);
+    presenceTimer = setTimeout(() => {
+      presenceTimer = undefined;
+      sendPresence();
+    }, 80);
+  };
+
   const trySend = () => {
     if (halted || !initialized || inflightRef !== null) return;
     if (!socket || socket.readyState !== WebSocket.OPEN) return;
@@ -203,6 +260,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
       setDocStatus("connected");
       schedulePersist();
       reportTitle(true);
+      sendPresence();
       trySend();
       return;
     }
@@ -221,6 +279,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
         setDocStatus("connected");
         schedulePersist();
         reportTitle(true);
+        sendPresence();
         trySend();
         return;
       }
@@ -238,19 +297,24 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
       setDocStatus("connected");
       schedulePersist();
       reportTitle(true);
+      sendPresence();
       trySend();
     } else {
       setDocStatus("connected");
       reportTitle();
+      sendPresence();
       trySend();
     }
   };
 
   const handleCommit = (commitJSON: CommitJSON) => {
     const commit = Commit.FromJSON(editor.state.schema, commitJSON);
-    dispatchCollab(receiveRemoteCommitTransaction(editor.state, commit));
+    dispatchCollab(
+      mapRemotePresenceTransaction(receiveRemoteCommitTransaction(editor.state, commit), commit.version),
+    );
 
-    if (inflightRef !== null && commit.ref === inflightRef) inflightRef = null;
+    const confirmedOwnCommit = inflightRef !== null && commit.ref === inflightRef;
+    if (confirmedOwnCommit) inflightRef = null;
 
     if (resyncTarget !== null && (getVersion(editor.state) ?? 0) >= resyncTarget) {
       resyncTarget = null;
@@ -259,7 +323,22 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
 
     schedulePersist();
     reportTitle();
+    if (confirmedOwnCommit) sendPresence();
     trySend();
+  };
+
+  const handlePresence = (peers: PresencePeer[]) => {
+    const livePeers = peers.filter((peer) => peer.clientId !== clientId);
+    options.onPresence?.(livePeers);
+    dispatchCollab(
+      setRemotePresenceTransaction(
+        editor.state,
+        peers,
+        clientId,
+        hasUnconfirmedSteps(),
+        getVersion(editor.state) ?? 0,
+      ),
+    );
   };
 
   const handleMessage = (raw: string) => {
@@ -282,6 +361,9 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
         case "commit":
           handleCommit(msg.commit);
           break;
+        case "presence":
+          handlePresence(msg.peers);
+          break;
         case "error":
           if (msg.ref && msg.ref === inflightRef) {
             halt(`commit rejected: ${msg.message}`);
@@ -297,7 +379,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
 
   editor = new Editor({
     element: options.mount,
-    extensions: [...allExtensions, Collab],
+    extensions: [...allExtensions, Collab, Presence],
     editable: false,
     content: "",
   });
@@ -309,6 +391,9 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
       schedulePersist();
       reportTitle(localEdit);
     }
+    if (!applyingCollab && transaction.selectionSet && !transaction.docChanged) {
+      schedulePresence();
+    }
     trySend();
   });
 
@@ -318,6 +403,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     editor.setEditable(!halted);
     setReady(true);
     reportTitle(true);
+    sendPresence();
     persist();
   };
 
@@ -331,6 +417,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
 
     socket.addEventListener("open", () => {
       if (!initialized) setDocStatus("connecting");
+      sendPresence();
     });
     socket.addEventListener("message", (e) => handleMessage(e.data as string));
     socket.addEventListener("close", () => {
@@ -376,9 +463,13 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     connect();
   });
 
+  window.addEventListener("drafts:username-change", sendPresence);
+
   return () => {
     disposed = true;
     if (saveTimer) clearTimeout(saveTimer);
+    if (presenceTimer) clearTimeout(presenceTimer);
+    window.removeEventListener("drafts:username-change", sendPresence);
     persist();
     socket?.close();
     editor.destroy();

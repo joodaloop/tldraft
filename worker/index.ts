@@ -14,7 +14,12 @@ import { pageTextFromDoc } from "../shared/pageText";
 import { routeApiRequest } from "./api";
 import { recordPageOpen } from "./api/pageLinks";
 import { currentUserId } from "./api/session";
-import { clientMessageSchema, type ClientMessage, type ServerMessage } from "./protocol";
+import {
+  clientMessageSchema,
+  type ClientMessage,
+  type PresencePeer,
+  type ServerMessage,
+} from "./protocol";
 
 export interface Env {
   DocumentServer: DurableObjectNamespace<DocumentServer>;
@@ -69,6 +74,8 @@ export class DocumentServer extends Server<Env> {
    * durable storage on demand.
    */
   #log: CommitJSON[] = [];
+  #presence = new Map<string, PresencePeer>();
+  #connectionClients = new Map<string, string>();
 
   /**
    * Serializes commit processing. Every incoming commit is rebased and applied
@@ -197,12 +204,19 @@ export class DocumentServer extends Server<Env> {
       case "commit":
         this.#enqueue(() => this.#applyCommit(connection, msg.commit));
         return;
+      case "presence":
+        this.#updatePresence(connection, msg.peer);
+        return;
       case "sync":
         this.#enqueue(() => this.#syncClient(connection, msg.version));
         return;
       default:
         this.#send(connection, { type: "error", message: "unknown message type" });
     }
+  }
+
+  onClose(connection: Connection) {
+    this.#removePresence(connection);
   }
 
   /** Run `task` after all previously-enqueued work, swallowing rejections. */
@@ -349,6 +363,42 @@ export class DocumentServer extends Server<Env> {
 
   #broadcast(msg: ServerMessage) {
     this.broadcast(JSON.stringify(msg));
+  }
+
+  #updatePresence(connection: Connection, peer: PresencePeer) {
+    const previousClientId = this.#connectionClients.get(connection.id);
+    if (previousClientId && previousClientId !== peer.clientId) {
+      this.#presence.delete(previousClientId);
+    }
+
+    const next: PresencePeer = {
+      clientId: peer.clientId,
+      username: this.#cleanUsername(peer.username),
+      color: peer.color,
+      version: peer.version,
+      selection: peer.selection,
+    };
+
+    this.#connectionClients.set(connection.id, next.clientId);
+    this.#presence.set(next.clientId, next);
+    this.#broadcastPresence();
+  }
+
+  #removePresence(connection: Connection) {
+    const clientId = this.#connectionClients.get(connection.id);
+    if (!clientId) return;
+    this.#connectionClients.delete(connection.id);
+    this.#presence.delete(clientId);
+    this.#broadcastPresence();
+  }
+
+  #broadcastPresence() {
+    this.#broadcast({ type: "presence", peers: [...this.#presence.values()] });
+  }
+
+  #cleanUsername(username: string) {
+    const cleaned = username.trim().replace(/\s+/g, " ").slice(0, 80);
+    return cleaned || "Anonymous";
   }
 
   async #touchPage() {

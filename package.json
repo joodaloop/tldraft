@@ -44,10 +44,10 @@
     "prosemirror-transform": "^1.12.0",
     "prosemirror-view": "^1.41.8",
     "solid-js": "^1.9.12",
-    "tailwindcss": "^4.3.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "tailwindcss": "^4.3.0",
     "@cloudflare/vite-plugin": "^1.40.0",
     "@types/node": "^24.12.3",
     "typescript": "~6.0.2",

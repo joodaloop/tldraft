@@ -3,8 +3,8 @@ import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-j
 import Doc, { type DocStatus } from "../components/Doc";
 import { apiFetch } from "../stores/auth";
 import { usePages } from "../stores/pages";
+import type { PresencePeer } from "../../worker/protocol";
 
-const DEFAULT_TOP_MESSAGE = "Share the link to this page to collaborate in real time (no live cursors yet).";
 const DEFAULT_DOCUMENT_TITLE = "tldraft • shareable offline-first docs";
 
 function DeleteConfirmation(props: {
@@ -57,6 +57,7 @@ export default function Draft() {
   const [confirmingDeleteId, setConfirmingDeleteId] = createSignal<string | null>(null);
   const [deletingId, setDeletingId] = createSignal<string | null>(null);
   const [temporaryTopMessage, setTemporaryTopMessage] = createSignal<string | null>(null);
+  const [livePeers, setLivePeers] = createSignal<PresencePeer[]>([]);
   let topMessageTimer: ReturnType<typeof setTimeout> | undefined;
 
   const activePage = createMemo(() => pages().find((page) => page.page_id === params.id));
@@ -64,11 +65,9 @@ export default function Draft() {
   const deleting = () => deletingId() === params.id;
   const hasOfflineChanges = () =>
     (status() === "offline" || status() === "halted") && (activePage()?.hasUnconfirmedChanges ?? false);
-  const defaultTopMessage = () => (hasOfflineChanges() ? "This page has unsaved changes." : DEFAULT_TOP_MESSAGE);
-  const topMessage = () => temporaryTopMessage() ?? defaultTopMessage();
+
   const topMessageIsAlert = () => temporaryTopMessage() !== null || hasOfflineChanges();
   const forgetsOnly = () => activePage()?.relationship !== "creator";
-  const actionLabel = () => (forgetsOnly() ? "Forget" : "Delete");
   const actionProgressLabel = () => (forgetsOnly() ? "Forgetting..." : "Deleting...");
   const actionError = () => `Could not ${forgetsOnly() ? "forget" : "delete"} this draft.`;
 
@@ -84,14 +83,6 @@ export default function Draft() {
       setTemporaryTopMessage(null);
       topMessageTimer = undefined;
     }, 3000);
-  };
-
-  const askToDelete = () => {
-    if (!params.id || deleting()) return;
-    if (topMessageTimer) clearTimeout(topMessageTimer);
-    topMessageTimer = undefined;
-    setTemporaryTopMessage(null);
-    setConfirmingDeleteId(params.id);
   };
 
   const deleteDraft = async () => {
@@ -142,17 +133,7 @@ export default function Draft() {
           classList={{ "text-red-800 opacity-100": topMessageIsAlert() }}
           role="status"
         >
-          {topMessage()}
-        </div>
-        <div class="absolute top-3 right-4 z-10 flex items-center gap-3 text-sm">
-          <button
-            type="button"
-            class="opacity-50 hover:opacity-100 disabled:opacity-0"
-            disabled={confirmingDelete() || deleting()}
-            onClick={askToDelete}
-          >
-            {deleting() ? actionProgressLabel() : actionLabel()}
-          </button>
+          {hasOfflineChanges()}
         </div>
         <Show when={confirmingDelete() || deleting()}>
           <DeleteConfirmation
@@ -167,6 +148,8 @@ export default function Draft() {
           {(id) => (
             <Doc
               room={id}
+              username={"DEFAULT USER"}
+              onPresence={setLivePeers}
               onStatus={setStatus}
               onTitle={(title, updatedAt, hasUnconfirmedChanges) =>
                 noteLocalPage(id, title, updatedAt, hasUnconfirmedChanges)
