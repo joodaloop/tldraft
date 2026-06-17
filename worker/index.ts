@@ -301,7 +301,11 @@ export class DocumentServer extends Server<Env> {
     // Broadcast to *everyone*, including the submitter. The submitter matches
     // `applied.ref` to confirm its own pending steps; others apply it as a
     // remote change.
-    this.#broadcast({ type: "commit", commit: applied });
+    this.#broadcast({
+      type: "commit",
+      commit: applied,
+      clientId: this.#connectionClients.get(connection.id),
+    });
   }
 
   /** Catch a reconnecting client up from `from`, or snapshot if we can't. */

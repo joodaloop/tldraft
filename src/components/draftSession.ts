@@ -9,7 +9,7 @@ import {
 import { Step } from "prosemirror-transform";
 import { PartySocket } from "partysocket";
 
-import type { CommitJSON, NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
+import type { NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
 import { allExtensions } from "../../extensions";
 import { emptyDocJSON, SCHEMA_VERSION } from "../../shared/schema";
@@ -17,7 +17,8 @@ import { displayTitle, pageTextFromDoc } from "../../shared/pageText";
 import { serverMessageSchema, type ClientMessage, type PresencePeer, type ServerMessage } from "../../worker/protocol";
 import { deleteCachedDoc, loadCachedDoc, saveCachedDoc, type CachedDoc } from "../stores/localDocs";
 import { Collab, receiveRemoteCommitTransaction } from "./collabExtension";
-import { mapRemotePresenceTransaction, Presence, setRemotePresenceTransaction } from "./presenceExtension";
+import { mapRemotePresenceTransaction, presenceKey, Presence, setRemotePresenceTransaction } from "./presenceExtension";
+import { addRemoteInsertGlow, RemoteInsertGlow } from "./remoteInsertGlowExtension";
 import { DEFAULT_USERNAME } from "../stores/ui";
 
 /** Connection lifecycle, surfaced for an optional status indicator. */
@@ -54,7 +55,11 @@ const defaultHost = () => window.location.host;
 const presenceColors = ["#0f766e", "#b45309", "#2563eb", "#be123c", "#6d28d9", "#15803d"];
 
 function randomId(): string {
-  return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
+  if (crypto.getRandomValues) {
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
+    return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  return Math.random().toString(36).slice(2, 14);
 }
 
 function colorForClient(clientId: string): string {
@@ -266,11 +271,18 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     }
   };
 
-  const handleCommit = (commitJSON: CommitJSON) => {
-    const commit = Commit.FromJSON(editor.state.schema, commitJSON);
-    dispatchCollab(mapRemotePresenceTransaction(receiveRemoteCommitTransaction(editor.state, commit), commit.version));
+  const collaboratorColor = (remoteClientId: string | undefined): string | undefined => {
+    if (!remoteClientId) return undefined;
+    return presenceKey.getState(editor.state)?.peers.get(remoteClientId)?.color ?? colorForClient(remoteClientId);
+  };
 
+  const handleCommit = (msg: Extract<ServerMessage, { type: "commit" }>) => {
+    const commit = Commit.FromJSON(editor.state.schema, msg.commit);
     const confirmedOwnCommit = inflightRef !== null && commit.ref === inflightRef;
+    const shouldGlowRemoteInsert = !confirmedOwnCommit && resyncTarget === null;
+    const tr = mapRemotePresenceTransaction(receiveRemoteCommitTransaction(editor.state, commit), commit.version);
+    dispatchCollab(shouldGlowRemoteInsert ? addRemoteInsertGlow(tr, collaboratorColor(msg.clientId)) : tr);
+
     if (confirmedOwnCommit) inflightRef = null;
 
     if (resyncTarget !== null && (getVersion(editor.state) ?? 0) >= resyncTarget) {
@@ -310,7 +322,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
           handleInit(msg);
           break;
         case "commit":
-          handleCommit(msg.commit);
+          handleCommit(msg);
           break;
         case "presence":
           handlePresence(msg.peers);
@@ -330,7 +342,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
 
   editor = new Editor({
     element: options.mount,
-    extensions: [...allExtensions, Collab, Presence],
+    extensions: [...allExtensions, Collab, Presence, RemoteInsertGlow],
     editable: false,
     content: "",
   });

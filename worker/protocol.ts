@@ -66,7 +66,7 @@ export type ServerMessage =
    * client recognizes it by `commit.ref` and confirms its pending steps;
    * everyone else applies it as a remote change.
    */
-  | { type: "commit"; commit: CommitJSON }
+  | { type: "commit"; commit: CommitJSON; clientId?: string }
   /** The currently connected peers with live cursor/selection metadata. */
   | { type: "presence"; peers: PresencePeer[] }
   /** A commit was rejected (bad base version, schema failure, etc.). */
@@ -79,7 +79,11 @@ export const serverMessageSchema = z.discriminatedUnion("type", [
     doc: nodeJSONSchema,
     schemaVersion: z.number().int().finite(),
   }),
-  z.object({ type: z.literal("commit"), commit: commitJSONSchema }),
+  z.object({
+    type: z.literal("commit"),
+    commit: commitJSONSchema,
+    clientId: z.string().min(1).max(80).optional(),
+  }),
   z.object({ type: z.literal("presence"), peers: z.array(presencePeerSchema) }),
   z.object({
     type: z.literal("error"),

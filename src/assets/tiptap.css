@@ -75,6 +75,28 @@
   color: white;
 }
 
+.remote-insert-glow {
+  animation: remote-insert-glow 5s ease-out forwards;
+  --remote-insert-color: #facc15;
+}
+
+@keyframes remote-insert-glow {
+  0% {
+    color: var(--remote-insert-color);
+    text-shadow: 0 0 0.65em var(--remote-insert-color);
+  }
+
+  70% {
+    color: var(--remote-insert-color);
+    text-shadow: 0 0 0.35em var(--remote-insert-color);
+  }
+
+  100% {
+    color: inherit;
+    text-shadow: none;
+  }
+}
+
 /* Only hint on the title (any empty heading) and the first body paragraph —
    not on every empty paragraph deeper in the doc. */
 .tiptap > .is-empty:is(h1, h2, h3, h4, h5, h6):first-child::before {
