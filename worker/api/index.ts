@@ -2,7 +2,7 @@ import type { Env } from "../index";
 import jwt from "@tsndr/cloudflare-worker-jwt";
 import { currentUserId } from "./session";
 import { listPages } from "./pages";
-import { linkUserToPage } from "./pageLinks";
+import { addPageForUser } from "./pageLinks";
 
 interface GoogleUserInfo {
   id: string;
@@ -144,7 +144,7 @@ async function addPage(request: Request, env: Env, pageId: string): Promise<Resp
   const userId = await currentUserId(request, env);
   if (!userId) return json({ error: "unauthorized" }, { status: 401 });
 
-  await linkUserToPage(env, userId, pageId, "opened");
+  await addPageForUser(env, userId, pageId);
 
   return json({ ok: true, pageId });
 }

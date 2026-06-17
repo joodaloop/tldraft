@@ -12,7 +12,7 @@ import { schema, emptyDocJSON, SCHEMA_VERSION } from "../shared/schema";
 import { migrateDoc } from "../shared/migrations";
 import { pageTextFromDoc } from "../shared/pageText";
 import { routeApiRequest } from "./api";
-import { recordPageOpen } from "./api/pageLinks";
+import { addPageForUser } from "./api/pageLinks";
 import { currentUserId } from "./api/session";
 import {
   clientMessageSchema,
@@ -166,7 +166,7 @@ export class DocumentServer extends Server<Env> {
     if (!userId) return;
 
     try {
-      await recordPageOpen(this.env, userId, this.name);
+      await addPageForUser(this.env, userId, this.name);
     } catch (err) {
       console.error("[DocumentServer] failed to record page open", err);
     }

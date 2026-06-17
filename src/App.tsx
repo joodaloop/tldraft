@@ -3,6 +3,7 @@ import { createEffect, onCleanup, onMount, type JSX } from "solid-js";
 import Draft from "./pages/Draft";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
+import Share from "./pages/Share";
 import Sidebar from "./components/Sidebar";
 import { SidebarIcon } from "./components/icons";
 import { PagesProvider } from "./stores/pages";
@@ -75,6 +76,7 @@ function App() {
     <Router root={(props) => <AppLayout>{props.children}</AppLayout>}>
       <Route path="/" component={Home} />
       <Route path="/draft/:id" component={Draft} />
+      <Route path="/share/:id" component={Share} />
       <Route path="/settings" component={Settings} />
     </Router>
   );

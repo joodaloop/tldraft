@@ -6,6 +6,17 @@ interface PageCreatorRow {
   created_by: string | null;
 }
 
+export async function ensurePageRow(
+  env: Env,
+  pageId: string,
+): Promise<void> {
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO pages (id, title, body) VALUES (?1, 'Untitled', '')",
+  )
+    .bind(pageId)
+    .run();
+}
+
 /**
  * Link a page to a user without downgrading a stronger existing relationship.
  *
@@ -62,4 +73,13 @@ export async function recordPageOpen(
 ): Promise<void> {
   const isCreator = await claimPageCreator(env, userId, pageId);
   await linkUserToPage(env, userId, pageId, isCreator ? "creator" : "opened");
+}
+
+export async function addPageForUser(
+  env: Env,
+  userId: string,
+  pageId: string,
+): Promise<void> {
+  await ensurePageRow(env, pageId);
+  await recordPageOpen(env, userId, pageId);
 }
