@@ -9,37 +9,19 @@ import {
 import { Step } from "prosemirror-transform";
 import { PartySocket } from "partysocket";
 
-import type { CommitJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
+import type { CommitJSON, NodeJSON } from "@stepwisehq/prosemirror-collab-commit/collab-commit";
 
 import { allExtensions } from "../../extensions";
 import { emptyDocJSON, SCHEMA_VERSION } from "../../shared/schema";
-import { pageTextFromDoc } from "../../shared/pageText";
-import {
-  serverMessageSchema,
-  type ClientMessage,
-  type PresencePeer,
-  type ServerMessage,
-} from "../../worker/protocol";
-import {
-  deleteCachedDoc,
-  loadCachedDoc,
-  saveCachedDoc,
-  type CachedDoc,
-} from "../stores/localDocs";
+import { displayTitle, pageTextFromDoc } from "../../shared/pageText";
+import { serverMessageSchema, type ClientMessage, type PresencePeer, type ServerMessage } from "../../worker/protocol";
+import { deleteCachedDoc, loadCachedDoc, saveCachedDoc, type CachedDoc } from "../stores/localDocs";
 import { Collab, receiveRemoteCommitTransaction } from "./collabExtension";
-import {
-  mapRemotePresenceTransaction,
-  Presence,
-  setRemotePresenceTransaction,
-} from "./presenceExtension";
+import { mapRemotePresenceTransaction, Presence, setRemotePresenceTransaction } from "./presenceExtension";
+import { DEFAULT_USERNAME } from "../stores/ui";
 
 /** Connection lifecycle, surfaced for an optional status indicator. */
-export type DocStatus =
-  | "connecting"
-  | "connected"
-  | "syncing"
-  | "offline"
-  | "halted";
+export type DocStatus = "connecting" | "connected" | "syncing" | "offline" | "halted";
 
 export interface DraftSessionOptions {
   /** Document id — becomes the Durable Object room name. */
@@ -59,11 +41,7 @@ export interface DraftSessionOptions {
    * Notified with the doc's display title and whether it has local changes
    * awaiting server confirmation.
    */
-  onTitle?: (
-    title: string,
-    updatedAt?: string,
-    hasUnconfirmedChanges?: boolean,
-  ) => void;
+  onTitle?: (title: string, updatedAt?: string, hasUnconfirmedChanges?: boolean) => void;
   /** Current display name for this browser tab, persisted by the page shell. */
   getUsername?: () => string;
   /** Notified with the other live clients in this document. */
@@ -89,7 +67,7 @@ function colorForClient(clientId: string): string {
 
 function cleanUsername(username: string | undefined): string {
   const cleaned = username?.trim().replace(/\s+/g, " ").slice(0, 80);
-  return cleaned || "Anonymous";
+  return cleaned || DEFAULT_USERNAME;
 }
 
 export function startDraftSession(options: DraftSessionOptions): () => void {
@@ -164,9 +142,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     if (!initialized || halted) return;
     const snap = snapshot();
     if (snap) {
-      cacheWrite = cacheWrite
-        .catch(() => undefined)
-        .then(() => saveCachedDoc(options.room, snap));
+      cacheWrite = cacheWrite.catch(() => undefined).then(() => saveCachedDoc(options.room, snap));
       void cacheWrite;
     }
   };
@@ -181,21 +157,16 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
   const reportTitle = (force = false) => {
     if (!options.onTitle) return;
     const [title] = pageTextFromDoc(editor.state.doc, "Untitled");
-    const next = title.slice(0, 80);
+    const next = displayTitle(title);
     const hasUnconfirmedChanges = hasUnconfirmedSteps();
-    if (
-      force ||
-      next !== lastTitle ||
-      hasUnconfirmedChanges !== lastHasUnconfirmedChanges
-    ) {
+    if (force || next !== lastTitle || hasUnconfirmedChanges !== lastHasUnconfirmedChanges) {
       lastTitle = next;
       lastHasUnconfirmedChanges = hasUnconfirmedChanges;
       options.onTitle(next, lastModified, hasUnconfirmedChanges);
     }
   };
 
-  const hasUnconfirmedSteps = () =>
-    (collabKey.getState(editor.state)?.unconfirmed.length ?? 0) > 0;
+  const hasUnconfirmedSteps = () => (collabKey.getState(editor.state)?.unconfirmed.length ?? 0) > 0;
 
   const send = (msg: ClientMessage) => socket?.send(JSON.stringify(msg));
 
@@ -244,24 +215,26 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     console.error(`[Doc:${options.room}] halted — ${reason}`);
   };
 
+  const resetToServerSnapshot = (version: number, doc: NodeJSON) => {
+    dispatchCollab(initCollabState(editor.state, version, doc));
+    editor.setEditable(!halted);
+    setReady(true);
+    setDocStatus("connected");
+    schedulePersist();
+    reportTitle(true);
+    sendPresence();
+    trySend();
+  };
+
   const handleInit = (msg: Extract<ServerMessage, { type: "init" }>) => {
     if (msg.schemaVersion !== SCHEMA_VERSION) {
-      halt(
-        `schema mismatch (server ${msg.schemaVersion}, client ${SCHEMA_VERSION}) — reload to upgrade`,
-      );
+      halt(`schema mismatch (server ${msg.schemaVersion}, client ${SCHEMA_VERSION}) — reload to upgrade`);
       return;
     }
 
     if (!initialized) {
       initialized = true;
-      dispatchCollab(initCollabState(editor.state, msg.version, msg.doc));
-      editor.setEditable(!halted);
-      setReady(true);
-      setDocStatus("connected");
-      schedulePersist();
-      reportTitle(true);
-      sendPresence();
-      trySend();
+      resetToServerSnapshot(msg.version, msg.doc);
       return;
     }
 
@@ -273,14 +246,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
           `[Doc:${options.room}] server could not replay history from v${current}; resetting to snapshot v${msg.version}`,
         );
         resyncTarget = null;
-        dispatchCollab(initCollabState(editor.state, msg.version, msg.doc));
-        editor.setEditable(!halted);
-        setReady(true);
-        setDocStatus("connected");
-        schedulePersist();
-        reportTitle(true);
-        sendPresence();
-        trySend();
+        resetToServerSnapshot(msg.version, msg.doc);
         return;
       }
       resyncTarget = msg.version;
@@ -291,14 +257,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
         `[Doc:${options.room}] local state (v${current}) is ahead of server (v${msg.version}); resetting to server snapshot`,
       );
       resyncTarget = null;
-      dispatchCollab(initCollabState(editor.state, msg.version, msg.doc));
-      editor.setEditable(!halted);
-      setReady(true);
-      setDocStatus("connected");
-      schedulePersist();
-      reportTitle(true);
-      sendPresence();
-      trySend();
+      resetToServerSnapshot(msg.version, msg.doc);
     } else {
       setDocStatus("connected");
       reportTitle();
@@ -309,9 +268,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
 
   const handleCommit = (commitJSON: CommitJSON) => {
     const commit = Commit.FromJSON(editor.state.schema, commitJSON);
-    dispatchCollab(
-      mapRemotePresenceTransaction(receiveRemoteCommitTransaction(editor.state, commit), commit.version),
-    );
+    dispatchCollab(mapRemotePresenceTransaction(receiveRemoteCommitTransaction(editor.state, commit), commit.version));
 
     const confirmedOwnCommit = inflightRef !== null && commit.ref === inflightRef;
     if (confirmedOwnCommit) inflightRef = null;
@@ -331,13 +288,7 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     const livePeers = peers.filter((peer) => peer.clientId !== clientId);
     options.onPresence?.(livePeers);
     dispatchCollab(
-      setRemotePresenceTransaction(
-        editor.state,
-        peers,
-        clientId,
-        hasUnconfirmedSteps(),
-        getVersion(editor.state) ?? 0,
-      ),
+      setRemotePresenceTransaction(editor.state, peers, clientId, hasUnconfirmedSteps(), getVersion(editor.state) ?? 0),
     );
   };
 

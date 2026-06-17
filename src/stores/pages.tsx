@@ -8,7 +8,7 @@ import {
   type Accessor,
   type ParentProps,
 } from "solid-js";
-import { pageTitleFromDocJSON } from "../../shared/pageText";
+import { displayTitle, pageTitleFromDocJSON } from "../../shared/pageText";
 import { apiFetch, currentUserId, rememberUserId } from "./auth";
 import { deleteCachedDoc, scanCachedDocs } from "./localDocs";
 import {
@@ -67,7 +67,7 @@ async function scanLocalPages(): Promise<LocalDraftRow[]> {
     page_id: room,
     created_at: "",
     updated_at: cached.updatedAt,
-    title: pageTitleFromDocJSON(visibleDoc, "Untitled").slice(0, 80),
+    title: displayTitle(pageTitleFromDocJSON(visibleDoc, "Untitled")),
     hasUnconfirmedChanges: cached.unconfirmed.length > 0,
   }));
 }
@@ -126,7 +126,7 @@ export function PagesProvider(props: ParentProps) {
     updated_at?: string,
     hasUnconfirmedChanges?: boolean,
   ) => {
-    const name = (title ?? "").trim() || "Untitled";
+    const name = displayTitle(title);
     setLocal((prev) => {
       const i = prev.findIndex((p) => p.page_id === page_id);
       if (i === -1) {

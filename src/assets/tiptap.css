@@ -58,7 +58,7 @@
 
 .remote-cursor::after {
   border-radius: 3px 3px 3px 0;
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
   font-weight: 500;
   left: -1px;

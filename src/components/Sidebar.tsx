@@ -1,7 +1,7 @@
 import { A, useNavigate } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { usePages } from "../stores/pages";
-import { ui } from "../stores/ui";
+import { DEFAULT_USERNAME, ui } from "../stores/ui";
 import type { DraftSummary } from "../stores/draftSummaries";
 
 type SortKey = "created" | "modified" | "name";
@@ -19,7 +19,12 @@ function SlidingSidebar(props: { children: (closeIfMobile: () => void) => JSX.El
       }}
     >
       <Show when={ui.sidebarOpen()}>
-        <div class="fixed inset-0 md:hidden bg-chosen/60" />
+        <button
+          type="button"
+          aria-label="Close sidebar"
+          class="fixed inset-0 md:hidden bg-chosen/60"
+          onClick={ui.closeSidebarIfMobile}
+        />
       </Show>
 
       {props.children(ui.closeSidebarIfMobile)}
@@ -182,7 +187,7 @@ export default function Sidebar(props: { activeId?: string }) {
             <input
               aria-label="Username"
               class="w-full rounded-md bg-transparent outline-0"
-              placeholder="anonymoose"
+              placeholder={DEFAULT_USERNAME}
               value={ui.username()}
               onInput={(event) => ui.setUsername(event.currentTarget.value)}
             />

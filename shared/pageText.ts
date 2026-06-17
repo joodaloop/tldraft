@@ -6,6 +6,12 @@ interface NodeJSONWithContent extends NodeJSON {
   content?: unknown;
 }
 
+export const TITLE_MAX = 80;
+
+export function displayTitle(raw: string | null | undefined): string {
+  return raw?.trim().slice(0, TITLE_MAX) || "Untitled";
+}
+
 export function plainTextFromDoc(doc: ProseMirrorNode): string {
   return doc.textBetween(0, doc.content.size, "\n");
 }

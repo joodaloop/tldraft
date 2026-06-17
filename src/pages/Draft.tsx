@@ -5,6 +5,7 @@ import { apiFetch } from "../stores/auth";
 import { usePages } from "../stores/pages";
 import { ui } from "../stores/ui";
 import type { PresencePeer } from "../../worker/protocol";
+import { displayTitle } from "../../shared/pageText";
 
 const DEFAULT_DOCUMENT_TITLE = "tldraft • shareable offline-first docs";
 
@@ -73,7 +74,7 @@ export default function Draft() {
   const actionError = () => `Could not ${forgetsOnly() ? "forget" : "delete"} this draft.`;
 
   createEffect(() => {
-    const title = activePage()?.title.trim() || "Untitled";
+    const title = displayTitle(activePage()?.title);
     document.title = `${title} – tldraft`;
   });
 

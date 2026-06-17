@@ -1,5 +1,6 @@
 ## todo
 - Time-spent in doc tracking
+- Show glowing letters from collaborator typing
 - Shareable URLs:
   - Revocable edit
   - Permanent edit

@@ -2,7 +2,7 @@ import { createSignal, onCleanup, onMount, type Accessor } from "solid-js";
 
 const COLLAPSED_STORAGE_KEY = "sidebar-collapsed";
 const MOBILE_SIDEBAR_QUERY = "(max-width: 767px)";
-const DEFAULT_USERNAME = "anonymoose";
+export const DEFAULT_USERNAME = "anonymoose";
 
 export interface UIState {
   username: Accessor<string>;

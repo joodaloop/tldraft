@@ -6,10 +6,11 @@ export type {
 } from "./draftSchemas";
 
 import type { DraftSummary, LocalDraftRow, ServerDraftRow } from "./draftSchemas";
+import { displayTitle } from "../../shared/pageText";
 
 function usableTitle(title: string | undefined): string | undefined {
-  const trimmed = title?.trim();
-  return trimmed && trimmed !== "Untitled" ? trimmed : undefined;
+  const titleText = displayTitle(title);
+  return titleText !== "Untitled" ? titleText : undefined;
 }
 
 function isPlaceholderServerTitle(page: ServerDraftRow): boolean {
@@ -17,11 +18,7 @@ function isPlaceholderServerTitle(page: ServerDraftRow): boolean {
   return !title || title === "Untitled" || title === page.page_id;
 }
 
-function localTitle(title: string | undefined): string {
-  return title?.trim() || "Untitled";
-}
-
-function displayTitle(
+function draftSummaryTitle(
   page: ServerDraftRow,
   local: LocalDraftRow | undefined,
   cached: ServerDraftRow | undefined,
@@ -32,7 +29,7 @@ function displayTitle(
     (localUpdated !== undefined && localUpdated >= (page.updated_at ?? ""));
 
   if (localIsCurrent && local?.title !== undefined) {
-    return localTitle(local.title);
+    return displayTitle(local.title);
   }
 
   if (isPlaceholderServerTitle(page)) {
@@ -43,7 +40,7 @@ function displayTitle(
     );
   }
 
-  return usableTitle(local?.title) ?? page.title ?? "Untitled";
+  return usableTitle(local?.title) ?? displayTitle(page.title);
 }
 
 function mergeUpdatedAt(server: ServerDraftRow, local: LocalDraftRow | undefined): string | undefined {
@@ -70,7 +67,7 @@ export function buildDraftSummaries(
       created_at: server.created_at,
       updated_at: mergeUpdatedAt(server, local),
       relationship: server.relationship,
-      title: displayTitle(server, local, cachedById.get(server.page_id)),
+      title: draftSummaryTitle(server, local, cachedById.get(server.page_id)),
       hasUnconfirmedChanges: local?.hasUnconfirmedChanges ?? false,
       source: local ? "merged" : "server",
     });
@@ -83,7 +80,7 @@ export function buildDraftSummaries(
       page_id: local.page_id,
       created_at: local.created_at,
       updated_at: local.updated_at,
-      title: localTitle(local.title),
+      title: displayTitle(local.title),
       hasUnconfirmedChanges: local.hasUnconfirmedChanges ?? false,
       source: "local",
     });
