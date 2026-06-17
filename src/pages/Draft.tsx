@@ -69,6 +69,9 @@ export default function Draft() {
     (status() === "offline" || status() === "halted") && (activePage()?.hasUnconfirmedChanges ?? false);
 
   const topMessageIsAlert = () => temporaryTopMessage() !== null || hasOfflineChanges();
+  const topMessage = () =>
+    temporaryTopMessage() ??
+    (hasOfflineChanges() ? "Offline — reconnect to save" : "Share this page's URL to edit it collaboratively.");
   const forgetsOnly = () => activePage()?.relationship !== "creator";
   const actionProgressLabel = () => (forgetsOnly() ? "Forgetting..." : "Deleting...");
   const actionError = () => `Could not ${forgetsOnly() ? "forget" : "delete"} this draft.`;
@@ -129,7 +132,10 @@ export default function Draft() {
 
   return (
     <main class="w-full relative">
-      <div class="fixed w-full top-0 left-0 bg-background border-b border-b-lines z-10">
+      <div
+        class="fixed w-full top-0 left-0 bg-background border-b border-b-lines z-10 transition-[padding]"
+        classList={{ "md:pl-[16rem]": ui.sidebarOpen() }}
+      >
         <div class="flex justify-between items-center">
           <div class="lg:w-8"></div>
           <div
@@ -137,7 +143,7 @@ export default function Draft() {
             classList={{ "text-red-800 opacity-100": topMessageIsAlert() }}
             role="status"
           >
-            {hasOfflineChanges()}
+            {topMessage()}
           </div>
           <div class="flex">
             <button

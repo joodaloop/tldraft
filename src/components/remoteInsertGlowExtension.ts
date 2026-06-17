@@ -14,6 +14,11 @@ interface GlowState {
   decorations: DecorationSet;
 }
 
+interface GlowMapRange {
+  from: number;
+  to: number;
+}
+
 type GlowMeta =
   | {
       type: "add";
@@ -32,20 +37,45 @@ function clampPos(doc: ProseMirrorNode, pos: number): number {
   return Math.max(0, Math.min(pos, doc.content.size));
 }
 
-function insertedRangesFromTransaction(tr: Transaction): GlowRange[] {
-  const ranges: GlowRange[] = [];
+function mergeRanges(ranges: GlowRange[]): GlowRange[] {
+  const sorted = ranges
+    .filter((range) => range.from < range.to)
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+  const merged: GlowRange[] = [];
 
-  tr.mapping.maps.forEach((map) => {
-    map.forEach((oldStart, oldEnd, newStart, newEnd) => {
-      if (oldStart !== oldEnd || newEnd <= newStart) return;
+  for (const range of sorted) {
+    const last = merged[merged.length - 1];
+    if (!last || range.from > last.to) {
+      merged.push({ ...range });
+    } else {
+      last.to = Math.max(last.to, range.to);
+    }
+  }
+
+  return merged;
+}
+
+export function insertedRangesFromTransaction(
+  tr: Transaction,
+  mapRange: GlowMapRange = { from: 0, to: tr.mapping.maps.length },
+): GlowRange[] {
+  const ranges: GlowRange[] = [];
+  const fromMap = Math.max(0, mapRange.from);
+  const toMap = Math.min(tr.mapping.maps.length, mapRange.to);
+
+  tr.mapping.maps.slice(fromMap, toMap).forEach((map, offset) => {
+    const i = fromMap + offset;
+    map.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+      if (newEnd <= newStart) return;
+      const remainingMaps = tr.mapping.slice(i + 1);
       ranges.push({
-        from: clampPos(tr.doc, newStart),
-        to: clampPos(tr.doc, newEnd),
+        from: clampPos(tr.doc, remainingMaps.map(newStart, 1)),
+        to: clampPos(tr.doc, remainingMaps.map(newEnd, -1)),
       });
     });
   });
 
-  return ranges.filter((range) => range.from < range.to);
+  return mergeRanges(ranges);
 }
 
 function removeExpired(decorations: DecorationSet, now: number): DecorationSet {
@@ -85,8 +115,11 @@ function scheduleCleanup(view: EditorView, currentTimer: ReturnType<typeof setTi
   }, delay);
 }
 
-export function addRemoteInsertGlow(tr: Transaction, color?: string): Transaction {
-  const ranges = insertedRangesFromTransaction(tr);
+export function addRemoteInsertGlow(tr: Transaction, color?: string, remoteStepCount?: number): Transaction {
+  const rebased = tr.getMeta("rebased");
+  const fromMap = typeof rebased === "number" ? rebased : 0;
+  const toMap = remoteStepCount === undefined ? tr.mapping.maps.length : fromMap + remoteStepCount;
+  const ranges = insertedRangesFromTransaction(tr, { from: fromMap, to: toMap });
   if (!ranges.length) return tr;
 
   return tr.setMeta(remoteInsertGlowKey, {

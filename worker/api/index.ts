@@ -1,6 +1,6 @@
 import type { Env } from "../index";
 import jwt from "@tsndr/cloudflare-worker-jwt";
-import { currentUserId } from "./session";
+import { currentUserId, getCookie } from "./session";
 import { listPages } from "./pages";
 import { addPageForUser } from "./pageLinks";
 
@@ -19,6 +19,10 @@ interface UserRow {
   email: string;
 }
 
+const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const OAUTH_STATE_COOKIE = "oauth_state";
+const OAUTH_STATE_MAX_AGE_SECONDS = 60 * 10;
+
 function json(value: unknown, init?: ResponseInit): Response {
   return Response.json(value, {
     ...init,
@@ -29,8 +33,17 @@ function json(value: unknown, init?: ResponseInit): Response {
   });
 }
 
-function redirect(location: string, status = 303): Response {
-  return new Response(null, { status, headers: { location } });
+function randomToken(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function cookie(name: string, value: string, maxAge: number, path = "/"): string {
+  return `${name}=${encodeURIComponent(value)}; Path=${path}; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+function clearCookie(name: string, path = "/"): string {
+  return `${name}=; Path=${path}; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
 function errorResponse(message: string, status = 500): Response {
@@ -45,6 +58,7 @@ function loginCallbackUrl(request: Request): string {
 }
 
 function startGoogleLogin(request: Request, env: Env): Response {
+  const state = randomToken();
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: loginCallbackUrl(request),
@@ -52,8 +66,15 @@ function startGoogleLogin(request: Request, env: Env): Response {
     scope: "openid email profile",
     access_type: "online",
     prompt: "select_account",
+    state,
   });
-  return redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`);
+  return new Response(null, {
+    status: 303,
+    headers: {
+      location: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+      "set-cookie": cookie(OAUTH_STATE_COOKIE, state, OAUTH_STATE_MAX_AGE_SECONDS, "/api/login/callback"),
+    },
+  });
 }
 
 async function exchangeCode(request: Request, env: Env, code: string): Promise<string> {
@@ -91,22 +112,31 @@ async function fetchGoogleUser(accessToken: string): Promise<GoogleUserInfo> {
 }
 
 async function findOrCreateUser(env: Env, googleUser: GoogleUserInfo): Promise<UserRow> {
-  const existing = await env.DB.prepare(
-    "SELECT id, google_sub, email FROM users WHERE google_sub = ?1 OR email = ?2 LIMIT 1",
+  const existingBySub = await env.DB.prepare(
+    "SELECT id, google_sub, email FROM users WHERE google_sub = ?1 LIMIT 1",
   )
-    .bind(googleUser.id, googleUser.email)
+    .bind(googleUser.id)
     .first<UserRow>();
 
-  if (existing) {
-    if (!existing.google_sub) {
-      await env.DB.prepare(
-        "UPDATE users SET google_sub = ?1, name = ?2, avatar_url = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?4",
-      )
-        .bind(googleUser.id, googleUser.name ?? googleUser.given_name ?? null, googleUser.picture ?? null, existing.id)
-        .run();
-      return { ...existing, google_sub: googleUser.id };
-    }
-    return existing;
+  if (existingBySub) {
+    await env.DB.prepare(
+      "UPDATE users SET email = ?1, name = ?2, avatar_url = ?3, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?4",
+    )
+      .bind(googleUser.email, googleUser.name ?? googleUser.given_name ?? null, googleUser.picture ?? null, existingBySub.id)
+      .run();
+    return { ...existingBySub, email: googleUser.email };
+  }
+
+  const existingByEmail = await env.DB.prepare(
+    "SELECT id, google_sub, email FROM users WHERE email = ?1 LIMIT 1",
+  )
+    .bind(googleUser.email)
+    .first<UserRow>();
+
+  if (existingByEmail) {
+    // google_sub is NOT NULL, so any existing email row is already linked to a
+    // different Google account (the matching-sub case is handled above).
+    throw new Error("This email address is already linked to a different Google account.");
   }
 
   const id = crypto.randomUUID();
@@ -125,18 +155,32 @@ async function finishGoogleLogin(request: Request, env: Env): Promise<Response> 
 
   const code = url.searchParams.get("code");
   if (!code) throw new Error("No authorization code found in request.");
+  const state = url.searchParams.get("state");
+  const storedState = getCookie(request, OAUTH_STATE_COOKIE);
+  if (!state || !storedState || state !== storedState) throw new Error("Invalid OAuth state.");
 
   const accessToken = await exchangeCode(request, env, code);
   const googleUser = await fetchGoogleUser(accessToken);
   const user = await findOrCreateUser(env, googleUser);
-  const token = await jwt.sign({ id: user.id }, env.JWT_SECRET);
+  const now = Math.floor(Date.now() / 1000);
+  const token = await jwt.sign(
+    {
+      id: user.id,
+      iat: now,
+      exp: now + SESSION_MAX_AGE_SECONDS,
+    },
+    env.JWT_SECRET,
+  );
+
+  const headers = new Headers({
+    location: "/",
+  });
+  headers.append("set-cookie", cookie("session", token, SESSION_MAX_AGE_SECONDS));
+  headers.append("set-cookie", clearCookie(OAUTH_STATE_COOKIE, "/api/login/callback"));
 
   return new Response(null, {
     status: 302,
-    headers: {
-      location: "/",
-      "set-cookie": `session=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60 * 60 * 24 * 7}`,
-    },
+    headers,
   });
 }
 
@@ -226,7 +270,9 @@ export function routeApiRequest(request: Request, env: Env): Response | Promise<
   if (url.pathname === "/api/login/callback" && request.method === "GET") {
     return finishGoogleLogin(request, env).catch((error) => {
       console.error("Error processing OAuth callback:", error);
-      return errorResponse(error instanceof Error ? error.message : String(error));
+      const response = errorResponse(error instanceof Error ? error.message : String(error));
+      response.headers.append("set-cookie", clearCookie(OAUTH_STATE_COOKIE, "/api/login/callback"));
+      return response;
     });
   }
 

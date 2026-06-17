@@ -281,7 +281,9 @@ export function startDraftSession(options: DraftSessionOptions): () => void {
     const confirmedOwnCommit = inflightRef !== null && commit.ref === inflightRef;
     const shouldGlowRemoteInsert = !confirmedOwnCommit && resyncTarget === null;
     const tr = mapRemotePresenceTransaction(receiveRemoteCommitTransaction(editor.state, commit), commit.version);
-    dispatchCollab(shouldGlowRemoteInsert ? addRemoteInsertGlow(tr, collaboratorColor(msg.clientId)) : tr);
+    dispatchCollab(
+      shouldGlowRemoteInsert ? addRemoteInsertGlow(tr, collaboratorColor(msg.clientId), commit.steps.length) : tr,
+    );
 
     if (confirmedOwnCommit) inflightRef = null;
 

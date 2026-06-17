@@ -416,6 +416,7 @@ export class DocumentServer extends Server<Env> {
 
   async #deletePage() {
     await this.#tail;
+    await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.#version = 0;
     this.#doc = emptyDocJSON();
