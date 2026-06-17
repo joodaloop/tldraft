@@ -9,5 +9,3 @@
   - Markdown
   - HTML
 - Update typography for density
-
-Goal: https://fitsonafloppy.com/

@@ -21,7 +21,16 @@ export default function Home() {
   return (
     <main class="max-w-md mx-auto my-32 px-6">
       <h1 class="text-4xl font-black text-center mb-6">tldraft.app</h1>
-      <p class="mb-4">Realtime collaborative text editing that also works completely offline, without an account.</p>
+      <p class="mb-4">
+        Realtime collaborative rich text editor that also works completely offline. Lightweight enough to{" "}
+        <a
+          class="underline underline-offset-3 decoration-stone-300 group-hover:decoration-stone-600"
+          href="https://fitsonafloppy.com/"
+        >
+          fit on a floppy
+        </a>
+        , and usable without logging in.
+      </p>
 
       <p>
         The app will <em>always</em> load, regardless of if you're online, and any edits you make while offline will be
@@ -63,6 +72,14 @@ export default function Home() {
       <h2 class="mt-16 mb-6 font-black text-center"> updates</h2>
 
       <div class="grid gap-6">
+        <article>
+          <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
+          <p>Improved sidebar design in response to a long-standing request for a simpler layout.</p>
+        </article>
+        <article>
+          <h3 class="mb-1.5 opacity-40">For Anjali,</h3>
+          <p>Added collaborative cursors, leaving a glowing trail of text in their wake.</p>
+        </article>
         <article>
           <h3 class="mb-1.5 opacity-40">For Nihal,</h3>
           <p>
