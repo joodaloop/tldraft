@@ -107,17 +107,17 @@ const PagesContext = createContext<PagesStore>();
  * Holds the user's drafts at the app root so they're resolved once on load and
  * shared across routes. The server list is seeded synchronously from a
  * localStorage cache (no flash), refreshed by a background /api/pages fetch
- * only when we already know the user is signed in, and merged with an
+ * that lets the session cookie establish auth state, and merged with an
  * IndexedDB scan of this device's drafts. `noteLocalPage` lets the editor push
  * live local drafts (and their titles) into the store.
  */
 export function PagesProvider(props: ParentProps) {
   const [cached, setCached] = createSignal<ServerDraftRow[] | null>(loadCachedList());
-  const [server, { refetch: refetchServer, mutate }] = createResource(currentUserId, fetchPages);
+  const [server, { refetch: refetchServer, mutate }] = createResource(fetchPages);
   const [local, setLocal] = createSignal<LocalDraftRow[]>([]);
 
   const refetch = () => {
-    if (currentUserId() !== null) void refetchServer();
+    void refetchServer();
   };
 
   const noteLocalPage = (
@@ -189,9 +189,8 @@ export function PagesProvider(props: ParentProps) {
   // Error("unauthorized") specifically on a 401 so we can tell auth failures
   // apart from transient network/server errors.
   const signedOut = () =>
-    currentUserId() === null ||
-    (server.state === "errored" &&
-      (server.error as Error | undefined)?.message === "unauthorized");
+    server.state === "errored" &&
+    (server.error as Error | undefined)?.message === "unauthorized";
 
   return (
     <PagesContext.Provider
